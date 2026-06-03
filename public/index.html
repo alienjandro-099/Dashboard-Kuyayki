@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUYAYKI CLOWN – Visita Hospitalaria Mes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        :root {
+            --rojo:    #E01A3C;
+            --amarillo:#FFD000;
+            --azul:    #1565C0;
+            --verde:   #1B8A4C;
+            --naranja: #F4681B;
+            --morado:  #7B1FA2;
+            --celeste: #039BE5;
+            --fondo:   #FFFBF2;
+            --blanco:  #FFFFFF;
+            --gris:    #F4F4F4;
+            --texto:   #1A1A2E;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: var(--fondo);
+            background-image:
+                radial-gradient(circle, rgba(255,208,0,.35) 2px, transparent 2px),
+                radial-gradient(circle, rgba(224,26,60,.20) 2px, transparent 2px);
+            background-size: 44px 44px, 22px 22px;
+            background-position: 0 0, 11px 11px;
+            color: var(--texto);
+            min-height: 100vh;
+        }
+
+        /* ── LOADING OVERLAY ── */
+        #loadingOverlay {
+            position: fixed; inset: 0;
+            background: rgba(255,251,242,.93);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 9000;
+        }
+        #loadingOverlay.hidden { display: none; }
+        .spin { font-size: 4.5rem; animation: rotate 1.1s linear infinite; display: block; }
+        @keyframes rotate { to { transform: rotate(360deg); } }
+        .loading-title { font-size: 1.3rem; font-weight: 800; color: var(--rojo); margin-top: 18px; }
+        .loading-sub   { font-size: .9rem; color: #888; margin-top: 6px; }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(120deg, var(--rojo) 0%, var(--naranja) 30%, var(--amarillo) 55%, var(--verde) 80%, var(--azul) 100%);
+            padding: 22px 24px 18px;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 5px 20px rgba(0,0,0,.22);
+        }
+        .header-corners { position: absolute; top: 50%; transform: translateY(-50%); font-size: 2.8rem; }
+        .header-corners.left  { left: 22px; }
+        .header-corners.right { right: 22px; }
+        .header h1 {
+            font-size: 2rem; font-weight: 900; color: #fff;
+            text-shadow: 2px 3px 0 rgba(0,0,0,.30);
+            letter-spacing: 3px;
+        }
+        .header h2 {
+            font-size: 1.05rem; color: rgba(255,255,255,.92);
+            font-weight: 600; margin-top: 4px; letter-spacing: 1px;
+        }
+        .header-meta {
+            display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 12px;
+        }
+        .hbadge {
+            background: rgba(255,255,255,.22);
+            border: 2px solid rgba(255,255,255,.45);
+            border-radius: 20px; padding: 3px 14px;
+            color: #fff; font-size: .78rem; font-weight: 700; letter-spacing: .4px;
+        }
+
+        /* ── MAIN ── */
+        .main { max-width: 1700px; margin: 0 auto; padding: 20px 16px 40px; }
+
+        /* ── ERROR BOX ── */
+        .error-box {
+            background: #FEF2F2; border: 2px solid #EF4444;
+            border-radius: 14px; padding: 22px; text-align: center; margin-bottom: 18px;
+            font-weight: 600; color: #B91C1C;
+        }
+        .error-box button {
+            margin-top: 12px; padding: 7px 22px; border-radius: 8px;
+            border: none; background: var(--rojo); color: #fff;
+            font-weight: 700; cursor: pointer; font-size: .88rem;
+        }
+
+        /* ── FILTERS PANEL ── */
+        .filters-panel {
+            background: #fff;
+            border: 3px solid var(--amarillo);
+            border-radius: 18px; padding: 18px 20px 14px;
+            margin-bottom: 18px;
+            box-shadow: 0 4px 18px rgba(0,0,0,.07);
+        }
+        .filters-title {
+            font-size: .95rem; font-weight: 800; color: var(--rojo);
+            margin-bottom: 14px; display: flex; align-items: center; gap: 7px;
+        }
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 14px; align-items: start;
+        }
+
+        /* filter group */
+        .filter-group { position: relative; }
+        .filter-label {
+            font-size: .72rem; font-weight: 800; color: var(--azul);
+            text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px;
+        }
+        .filter-btn {
+            width: 100%; padding: 7px 10px;
+            border: 2px solid #ddd; border-radius: 10px;
+            background: #fff; font-size: .83rem; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: border-color .2s;
+            text-align: left;
+        }
+        .filter-btn:hover, .filter-btn.active { border-color: var(--azul); }
+        .filter-btn.active { background: #EFF6FF; }
+        .fbtn-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+        .fbtn-badge {
+            background: #aaa; color: #fff;
+            border-radius: 10px; padding: 2px 8px;
+            font-size: .72rem; font-weight: 700; flex-shrink: 0;
+        }
+        .fbtn-badge.active-filter { background: var(--rojo); }
+
+        /* dropdown */
+        .filter-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: #fff; border: 2px solid var(--azul);
+            border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.14);
+            z-index: 500; max-height: 300px; display: none; flex-direction: column;
+        }
+        .filter-dropdown.open { display: flex; }
+        .fdd-search {
+            padding: 8px 12px; border: none; border-bottom: 1px solid #eee;
+            font-size: .84rem; outline: none; border-radius: 10px 10px 0 0;
+        }
+        .fdd-options {
+            overflow-y: auto; flex: 1; padding: 4px;
+        }
+        .fdd-option {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; cursor: pointer; border-radius: 7px;
+            font-size: .83rem; transition: background .12s;
+        }
+        .fdd-option:hover { background: #EFF6FF; }
+        .fdd-option input[type="checkbox"] { accent-color: var(--azul); cursor: pointer; }
+        .fdd-option.all-opt {
+            font-weight: 700; color: var(--azul);
+            border-bottom: 1px solid #eee; margin-bottom: 2px; padding-bottom: 8px;
+        }
+        .fdd-footer {
+            display: flex; gap: 6px; padding: 8px;
+            border-top: 1px solid #eee;
+        }
+        .fdd-footer button {
+            flex: 1; padding: 5px; border-radius: 7px;
+            border: none; cursor: pointer; font-size: .8rem; font-weight: 700;
+        }
+        .btn-apply { background: var(--azul); color: #fff; }
+        .btn-clear-f { background: #f0f0f0; color: #666; }
+
+        /* actions bar */
+        .filters-bar {
+            margin-top: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+        }
+        .btn-clear-all {
+            padding: 5px 16px; border-radius: 8px;
+            border: 2px solid var(--naranja); background: #fff; color: var(--naranja);
+            font-weight: 800; font-size: .78rem; cursor: pointer; transition: all .2s;
+        }
+        .btn-clear-all:hover { background: var(--naranja); color: #fff; }
+        .results-info { font-size: .82rem; color: #666; }
+        .results-info strong { color: var(--rojo); }
+
+        /* ── TABLE CARD ── */
+        .table-card {
+            background: #fff;
+            border: 3px solid var(--morado);
+            border-radius: 18px;
+            box-shadow: 0 4px 20px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        .table-topbar {
+            background: linear-gradient(120deg, var(--morado), var(--azul));
+            padding: 11px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .table-topbar-title { color: #fff; font-weight: 800; font-size: .97rem; }
+        .btn-refresh-now {
+            background: rgba(255,255,255,.18);
+            border: 2px solid rgba(255,255,255,.45);
+            color: #fff; padding: 4px 14px; border-radius: 8px;
+            cursor: pointer; font-size: .78rem; font-weight: 700;
+            transition: background .2s;
+        }
+        .btn-refresh-now:hover { background: rgba(255,255,255,.32); }
+
+        .table-scroll { overflow-x: auto; max-height: 620px; overflow-y: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: .79rem; }
+        thead { position: sticky; top: 0; z-index: 10; }
+        thead th {
+            background: linear-gradient(135deg, #1A1A4E, #1565C0);
+            color: #fff; padding: 10px 12px; text-align: left;
+            font-weight: 700; font-size: .76rem; letter-spacing: .3px;
+            white-space: nowrap; border-right: 1px solid rgba(255,255,255,.12);
+        }
+        tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .12s; }
+        tbody tr:hover { background: #FFFBF0 !important; }
+        tbody tr:nth-child(even) { background: #F5F0FF; }
+        tbody td {
+            padding: 7px 12px; vertical-align: middle;
+            border-right: 1px solid #f2f2f2;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block; padding: 2px 10px;
+            border-radius: 12px; font-size: .73rem; font-weight: 700;
+        }
+        .b-actual   { background: #D1FAE5; color: #065F46; }
+        .b-historico{ background: #FEF3C7; color: #92400E; }
+        .b-si       { background: #DBEAFE; color: #1E40AF; }
+        .b-no       { background: #FFE4E6; color: #9F1239; }
+        .b-mes      {
+            background: linear-gradient(120deg, var(--morado), var(--azul));
+            color: #fff; padding: 2px 12px;
+        }
+        .fecha-reg  { font-weight: 700; color: var(--morado); }
+        .dni-cell   { font-family: monospace; font-size: .82rem; }
+        .nombre-cell { font-weight: 600; }
+        .payaso-cell { font-weight: 700; color: var(--naranja); }
+        .fecha-asistir { font-size: .77rem; color: #333; }
+
+        /* no results */
+        .no-results { text-align: center; padding: 48px; color: #aaa; }
+        .no-results .nr-emoji { font-size: 3.5rem; }
+
+        /* refresh info */
+        .refresh-footer {
+            text-align: center; font-size: .73rem; color: #bbb; margin-top: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+    <span class="spin">🤡</span>
+    <div class="loading-title">Cargando datos…</div>
+    <div class="loading-sub">Conectando con los formularios Kuyayki Clown</div>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+    <span class="header-corners left">🎪</span>
+    <span class="header-corners right">🎪</span>
+    <h1>🤡 KUYAYKI CLOWN 🤡</h1>
+    <h2>📋 REPORTE – VISITA HOSPITALARIA MES</h2>
+    <div class="header-meta">
+        <span class="hbadge" id="hLastUpdate">Cargando…</span>
+        <span class="hbadge" id="hTotalReg">0 registros</span>
+        <span class="hbadge" id="hNextRefresh">Próxima actualización: 12 h</span>
+    </div>
+</div>
+
+<div class="main">
+
+    <!-- ERROR -->
+    <div id="errorBox" class="error-box" style="display:none">
+        ⚠️ No se pudo cargar la información. <span id="errDetail"></span>
+        <br><button onclick="loadData()">🔄 Reintentar</button>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="filters-panel" id="filtersPanel" style="display:none">
+        <div class="filters-title">🎨 Segmentación de datos</div>
+        <div class="filters-grid" id="filtersGrid"></div>
+        <div class="filters-bar">
+            <button class="btn-clear-all" onclick="clearAllFilters()">✕ Limpiar todos</button>
+            <span class="results-info">
+                Mostrando <strong id="shownCount">0</strong> de <strong id="totalCount">0</strong> registros
+            </span>
+        </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-card" id="tableCard" style="display:none">
+        <div class="table-topbar">
+            <span class="table-topbar-title">📊 Visitas Hospitalarias</span>
+            <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+        </div>
+        <div class="table-scroll">
+            <table>
+                <thead><tr id="tableHeaders"></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="refresh-footer" id="refreshFooter"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════
+const URL_F1 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcKt0v5H11947fOc1zdhujgFzIPTIbiUriiE2Bp-4rN517iFcvT87u0PB6592WFZZnx9yQxt9DJOQe/pub?gid=1820549015&single=true&output=csv';
+const URL_F2 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ2Jp4EiUUOpL7OxIYjb3KZji7ekS3oASySE-GC6hBeNxCE1OVp65ZMJ_TVSz9kYqfe1tTGBJ6PJT38/pub?gid=242877729&single=true&output=csv';
+const REFRESH_MS = 12 * 60 * 60 * 1000;
+
+const FECHA_REPLACEMENTS = {
+    'Viernes 27 – Hospital Rebagliati (Neurología 13A) – 3:00 p.m.': 'Viernes 27 – Rebagliati Neurología – 2:00 p.m.',
+    'Viernes 27 – Rebagliati Neurología – 3:00 p.m.':                'Viernes 27 – Rebagliati Neurología – 2:00 p.m.',
+    'Viernes 24 – Rebagliati Neurología – 3:00 p.m.':                'Viernes 24 – Rebagliati Neurología – 2:00 p.m.',
+    'Lunes 25 – Pasacalle Centro de Lima - 2:00 p.m.':                        'Lunes 25 – Pasacalle Centro de Lima - 10:00 a.m.',
+    'Lunes 25 – Pasacalle Centro de Lima - 10:00 p.m.':                       'Lunes 25 – Pasacalle Centro de Lima - 10:00 a.m.',
+};
+
+const COLUMNS = [
+    { key: 'fechaRegistro',  label: 'Fecha de Registro' },
+    { key: 'dni',            label: 'DNI'               },
+    { key: 'nombreCompleto', label: 'Nombre Completo'   },
+    { key: 'payaso',         label: 'Payaso'            },
+    { key: 'genero',         label: 'Género'            },
+    { key: 'correo',         label: 'Correo'            },
+    { key: 'celular',        label: 'Celular'           },
+    { key: 'experiencia',    label: 'Experiencia'       },
+    { key: 'mes',            label: 'Mes'               },
+    { key: 'fechasAsistir',  label: 'Fechas Asistir'    },
+];
+
+// Orden cronológico de meses para ordenar el filtro MES
+const MONTH_ORDER = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                     'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const monthRank = m => { const i = MONTH_ORDER.indexOf((m||'').toUpperCase()); return i < 0 ? 99 : i; };
+
+const FILTER_DEFS = [
+    { key: 'dni',            label: 'DNI'               },
+    { key: 'nombreCompleto', label: 'NOMBRE'            },
+    { key: 'tipoRegistro2',  label: 'TIPO'              },
+    { key: 'mes',            label: 'MES'               },
+    { key: 'fechasAsistir',  label: 'FECHAS DISPONIBLES'},
+];
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let allData      = [];
+let activeFilters= {};
+let nextRefresh  = null;
+
+// ═══════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════
+function norm(s) {
+    if (!s) return '';
+    return s.trim().toLowerCase()
+             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+             .replace(/[¿¡]/g, '');
+}
+
+function findCol(headers, terms) {
+    for (const t of terms) {
+        const nt = norm(t);
+        const found = headers.find(h => {
+            const nh = norm(h);
+            return nh === nt || nh.includes(nt);
+        });
+        if (found !== undefined) return found;
+    }
+    return null;
+}
+
+function parseTS(str) {
+    if (!str) return null;
+    // ISO-like: "2026-01-08 20:44:29"
+    let d = new Date(str);
+    if (!isNaN(d)) return d;
+    // DD/MM/YYYY HH:MM
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[T ](\d{1,2}):(\d{2})/);
+    if (m) return new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]);
+    // M/D/YYYY HH:MM
+    const m2 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m2) return new Date(+m2[3], +m2[1]-1, +m2[2]);
+    return null;
+}
+
+function fmtDDMM(val) {
+    const d = parseTS(val);
+    if (!d) return val || '';
+    return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+}
+
+function cleanPhone(raw) {
+    if (!raw) return '';
+    const digits = raw.replace(/[^0-9]/g, '');
+    const d9 = digits.slice(-9);
+    if (d9.length === 9) return '+51 ' + d9.slice(0,3) + ' ' + d9.slice(3,6) + ' ' + d9.slice(6);
+    return raw.trim();
+}
+
+// ═══════════════════════════════════════════
+//  FETCH CSV
+// ═══════════════════════════════════════════
+async function fetchCSV(url) {
+    const resp = await fetch(url, { cache: 'no-cache' });
+    const text = await resp.text();
+    return new Promise((resolve, reject) => {
+        Papa.parse(text, {
+            header: false,
+            skipEmptyLines: false,
+            complete: r => resolve(r.data),
+            error:    e => reject(e),
+        });
+    });
+}
+
+// ═══════════════════════════════════════════
+//  PROCESS FUENTE 1
+// ═══════════════════════════════════════════
+function processF1(raw) {
+    // Skip rows with < 4 non-empty cells (mirrors Power Query SkipRows)
+    const valid = raw.filter(row => row.filter(c => c && c.trim()).length >= 4);
+    if (valid.length < 2) return [];
+
+    const headers = valid[0];
+    const rows    = valid.slice(1);
+
+    const iMarca = headers.indexOf(findCol(headers, ['Marca temporal']));
+    const iMes   = headers.indexOf(findCol(headers, ['Mes de registro']));
+    const iDNI   = headers.indexOf(findCol(headers, ['Ingresa tu DNI', 'INGRESA TU DNI']));
+    const iExp   = headers.indexOf(findCol(headers, ['experiencia en hospitales', 'Experiencia']));
+
+    // All fecha columns
+    const fechaIdxs = headers.map((h,i) => ({ h, i }))
+        .filter(x => norm(x.h).includes('cuales de las siguientes fechas') ||
+                     norm(x.h).includes('fechas puedes asistir'));
+
+    if (iMarca < 0 || iDNI < 0) return [];
+
+    const get = (row, i) => (i >= 0 && i < row.length) ? (row[i] || '').trim() : '';
+
+    // Determine max timestamp per DNI+Mes
+    const maxTS = {};
+    rows.forEach(row => {
+        const dni = get(row, iDNI);
+        const mes = get(row, iMes);
+        if (!dni) return;
+        const key = `${dni}||${mes}`;
+        const ts  = parseTS(get(row, iMarca));
+        if (!ts) return;
+        if (!maxTS[key] || ts > maxTS[key]) maxTS[key] = ts;
+    });
+
+    const out = [];
+    rows.forEach(row => {
+        const dni = get(row, iDNI);
+        if (!dni) return;
+
+        const marcaStr = get(row, iMarca);
+        const mes      = get(row, iMes).toUpperCase();
+        const exp      = get(row, iExp);
+        const key      = `${dni}||${get(row, iMes)}`;
+        const ts       = parseTS(marcaStr);
+        const tipo     = (ts && maxTS[key] && ts.getTime() === maxTS[key].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
+
+        // Combine all fecha columns
+        const fechasRaw = fechaIdxs.map(x => get(row, x.i)).filter(Boolean).join(', ');
+
+        // Split by comma, clean, replace
+        const fechas = fechasRaw.split(',')
+            .map(f => {
+                const c = f.trim();
+                return FECHA_REPLACEMENTS[c] || c;
+            })
+            .filter(Boolean);
+
+        if (fechas.length === 0) return;
+
+        fechas.forEach(fecha => {
+            out.push({ marcaStr, mes, dni, exp, tipo, fecha });
+        });
+    });
+
+    return out;
+}
+
+// ═══════════════════════════════════════════
+//  PROCESS FUENTE 2 → lookup map
+// ═══════════════════════════════════════════
+function processF2(raw) {
+    if (raw.length < 2) return {};
+
+    const headers = raw[0];
+    const rows    = raw.slice(1);
+
+    const iMarca    = headers.indexOf(findCol(headers, ['Marca temporal']));
+    const iDNI      = headers.indexOf(findCol(headers, ['INGRESA TU DNI', 'Ingresa tu DNI']));
+    const iNomComp  = headers.indexOf(findCol(headers, ['Nombre Completo']));
+    const iNombres  = headers.indexOf(findCol(headers, ['Nombres']));
+    const iApPat    = headers.indexOf(findCol(headers, ['Apellido Paterno']));
+    const iApMat    = headers.indexOf(findCol(headers, ['Apellido Materno']));
+    const iArt      = headers.indexOf(findCol(headers, ['Nombre art', 'artistico', 'artístico']));
+    const iGenero   = headers.indexOf(findCol(headers, ['nero', 'Genero']));
+    const iCelular  = headers.indexOf(findCol(headers, ['WhatsApp', 'Celular', 'celular']));
+    const iCorreo   = headers.indexOf(findCol(headers, ['Correo', 'correo']));
+
+    if (iDNI < 0) return {};
+
+    const get = (row, i) => (i >= 0 && i < row.length) ? (row[i] || '').trim() : '';
+
+    // Max timestamp per DNI
+    const maxTS = {};
+    rows.forEach(row => {
+        const dni = get(row, iDNI);
+        if (!dni) return;
+        const ts = parseTS(get(row, iMarca));
+        if (!ts) return;
+        if (!maxTS[dni] || ts > maxTS[dni]) maxTS[dni] = ts;
+    });
+
+    const lookup = {};
+    rows.forEach(row => {
+        const dni = get(row, iDNI);
+        if (!dni) return;
+        const ts = parseTS(get(row, iMarca));
+        if (!ts || !maxTS[dni] || ts.getTime() !== maxTS[dni].getTime()) return;
+
+        let nombre = get(row, iNomComp);
+        if (!nombre) {
+            const parts = [get(row, iNombres), get(row, iApPat), get(row, iApMat)];
+            nombre = parts.filter(Boolean).map(s => s.toUpperCase()).join(' ');
+        }
+
+        lookup[dni] = {
+            nombreCompleto: nombre,
+            payaso:  get(row, iArt),
+            genero:  get(row, iGenero),
+            correo:  get(row, iCorreo),
+            celular: cleanPhone(get(row, iCelular)),
+        };
+    });
+
+    return lookup;
+}
+
+// ═══════════════════════════════════════════
+//  BUILD REPORT ROWS
+// ═══════════════════════════════════════════
+function buildReport(f1, f2) {
+    return f1.map(r => {
+        const p = f2[r.dni] || {};
+        return {
+            fechaRegistro:  fmtDDMM(r.marcaStr),
+            _ts:            r.marcaStr,
+            dni:            r.dni,
+            nombreCompleto: p.nombreCompleto || '',
+            payaso:         p.payaso         || '',
+            genero:         p.genero         || '',
+            correo:         p.correo         || '',
+            celular:        p.celular        || '',
+            experiencia:    r.exp            || '',
+            tipoRegistro2:  r.tipo,
+            mes:            r.mes,
+            fechasAsistir:  r.fecha,
+        };
+    });
+}
+
+// ═══════════════════════════════════════════
+//  FILTERS – RENDER
+// ═══════════════════════════════════════════
+function renderFilters(data) {
+    const grid = document.getElementById('filtersGrid');
+    grid.innerHTML = '';
+
+    FILTER_DEFS.forEach(fd => {
+        // Filtros dependientes (cascada): los valores disponibles se calculan
+        // sobre los datos ya filtrados por TODOS los demás filtros activos.
+        const src = dataExcluding(fd.key);
+        let values = [...new Set(src.map(r => r[fd.key]).filter(v => v !== '' && v != null))];
+        if (fd.key === 'mes') values.sort((a, b) => monthRank(a) - monthRank(b));
+        else                  values.sort((a, b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
+        const sel    = activeFilters[fd.key] || [];
+
+        const optionsHTML = [
+            `<div class="fdd-option all-opt">
+                <input type="checkbox" id="all-${fd.key}" ${sel.length===0?'checked':''}
+                       onchange="toggleAll('${fd.key}', this.checked)">
+                <label for="all-${fd.key}" style="cursor:pointer">Seleccionar todo</label>
+            </div>`,
+            ...values.map((v, i) => {
+                const checked = sel.length===0 || sel.includes(v);
+                const vSafe   = escHtml(v);
+                return `<div class="fdd-option">
+                    <input type="checkbox" id="o-${fd.key}-${i}" value="${vSafe}"
+                           ${checked?'checked':''} onchange="optChanged('${fd.key}')">
+                    <label for="o-${fd.key}-${i}" style="cursor:pointer">${vSafe}</label>
+                </div>`;
+            }),
+        ].join('');
+
+        const labelText = getBtnLabel(fd.key);
+        const badgeText = sel.length === 0 ? 'Todos' : sel.length;
+        const badgeCls  = sel.length === 0 ? '' : 'active-filter';
+
+        const div = document.createElement('div');
+        div.className = 'filter-group';
+        div.innerHTML = `
+            <div class="filter-label">🎪 ${fd.label}</div>
+            <button class="filter-btn" id="fbtn-${fd.key}" onclick="toggleDd('${fd.key}')">
+                <span class="fbtn-label" id="flbl-${fd.key}">${escHtml(labelText)}</span>
+                <span class="fbtn-badge ${badgeCls}" id="fbdg-${fd.key}">${badgeText}</span>
+            </button>
+            <div class="filter-dropdown" id="fdd-${fd.key}">
+                <input class="fdd-search" type="text" placeholder="Buscar…"
+                       oninput="searchFdd('${fd.key}', this.value)">
+                <div class="fdd-options" id="fopts-${fd.key}">${optionsHTML}</div>
+                <div class="fdd-footer">
+                    <button class="btn-apply"   onclick="applyFilter('${fd.key}'); closeDd('${fd.key}')">Aplicar</button>
+                    <button class="btn-clear-f" onclick="clearFilter('${fd.key}')">Limpiar</button>
+                </div>
+            </div>`;
+        grid.appendChild(div);
+    });
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getBtnLabel(key) {
+    const sel = activeFilters[key];
+    if (!sel || sel.length === 0) return 'Todos';
+    if (sel.length === 1) return sel[0];
+    return `${sel.length} seleccionados`;
+}
+
+function toggleDd(key) {
+    const dd   = document.getElementById(`fdd-${key}`);
+    const open = dd.classList.contains('open');
+    closeAllDd();
+    if (!open) {
+        dd.classList.add('open');
+        document.getElementById(`fbtn-${key}`).classList.add('active');
+    }
+}
+function closeDd(key) {
+    document.getElementById(`fdd-${key}`)?.classList.remove('open');
+    document.getElementById(`fbtn-${key}`)?.classList.remove('active');
+}
+function closeAllDd() {
+    document.querySelectorAll('.filter-dropdown').forEach(d => d.classList.remove('open'));
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+}
+
+function searchFdd(key, q) {
+    const lq = q.toLowerCase();
+    document.querySelectorAll(`#fopts-${key} .fdd-option:not(.all-opt)`).forEach(el => {
+        el.style.display = el.querySelector('label').textContent.toLowerCase().includes(lq) ? '' : 'none';
+    });
+}
+
+function toggleAll(key, checked) {
+    document.querySelectorAll(`#fopts-${key} input[type="checkbox"]:not([id^="all-"])`).forEach(cb => cb.checked = checked);
+    if (checked) delete activeFilters[key];
+    applyFilter(key);
+}
+
+function optChanged(key) {
+    const all  = [...document.querySelectorAll(`#fopts-${key} input[type="checkbox"]:not([id^="all-"])`)];
+    const allCk = all.every(cb => cb.checked);
+    document.getElementById(`all-${key}`).checked = allCk;
+}
+
+function applyFilter(key) {
+    const cbs  = [...document.querySelectorAll(`#fopts-${key} input[type="checkbox"]:not([id^="all-"])`)];
+    const sel  = cbs.filter(cb => cb.checked).map(cb => cb.value);
+    if (sel.length === cbs.length) {
+        delete activeFilters[key];
+    } else {
+        activeFilters[key] = sel;
+    }
+    // Re-render para que los demás filtros se actualicen en cascada
+    renderFilters(allData);
+    renderTable(filtered());
+    // Reabrir el dropdown que el usuario estaba usando
+    toggleDd(key);
+}
+
+function clearFilter(key) {
+    delete activeFilters[key];
+    renderFilters(allData);   // re-render to reset checkboxes
+    closeDd(key);
+    renderTable(filtered());
+}
+
+function clearAllFilters() {
+    FILTER_DEFS.forEach(fd => delete activeFilters[fd.key]);
+    renderFilters(allData);
+    renderTable(allData);
+}
+
+function refreshBadge(key) {
+    const sel   = activeFilters[key];
+    const badge = document.getElementById(`fbdg-${key}`);
+    const label = document.getElementById(`flbl-${key}`);
+    if (!badge) return;
+    if (!sel || sel.length === 0) {
+        badge.textContent = 'Todos'; badge.className = 'fbtn-badge';
+        label.textContent = 'Todos';
+    } else {
+        badge.textContent = sel.length; badge.className = 'fbtn-badge active-filter';
+        label.textContent = sel.length === 1 ? sel[0] : `${sel.length} seleccionados`;
+    }
+}
+
+function filtered() {
+    return allData.filter(row =>
+        FILTER_DEFS.every(fd => {
+            const sel = activeFilters[fd.key];
+            return !sel || sel.length === 0 || sel.includes(row[fd.key]);
+        })
+    );
+}
+
+// Datos filtrados por todos los filtros activos EXCEPTO 'exceptKey'.
+// Sirve para calcular las opciones disponibles de cada filtro en cascada.
+function dataExcluding(exceptKey) {
+    return allData.filter(row =>
+        FILTER_DEFS.every(fd => {
+            if (fd.key === exceptKey) return true;
+            const sel = activeFilters[fd.key];
+            return !sel || sel.length === 0 || sel.includes(row[fd.key]);
+        })
+    );
+}
+
+// ═══════════════════════════════════════════
+//  TABLE – RENDER
+// ═══════════════════════════════════════════
+function initHeaders() {
+    document.getElementById('tableHeaders').innerHTML =
+        COLUMNS.map(c => `<th>${c.label}</th>`).join('');
+}
+
+function renderTable(data) {
+    document.getElementById('shownCount').textContent = data.length;
+    document.getElementById('totalCount').textContent = allData.length;
+    document.getElementById('hTotalReg').textContent  = `${allData.length} registros totales`;
+
+    const tbody = document.getElementById('tableBody');
+    if (data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${COLUMNS.length}" class="no-results">
+            <div class="nr-emoji">🤡</div>
+            <p>Sin resultados para los filtros seleccionados</p>
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = data.map(row => {
+        const expNorm = norm(row.experiencia);
+        const expB  = expNorm.startsWith('s') ? 'b-si' : (expNorm.startsWith('n') ? 'b-no' : '');
+        return `<tr>
+            <td class="fecha-reg">${escHtml(row.fechaRegistro)}</td>
+            <td class="dni-cell">${escHtml(row.dni)}</td>
+            <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+            <td class="payaso-cell">${row.payaso ? escHtml(row.payaso) : '<em style="color:#ccc">—</em>'}</td>
+            <td>${escHtml(row.genero) || '—'}</td>
+            <td><small>${escHtml(row.correo) || '—'}</small></td>
+            <td><small>${escHtml(row.celular) || '—'}</small></td>
+            <td>${row.experiencia && expB ? `<span class="badge ${expB}">${escHtml(row.experiencia)}</span>` : (escHtml(row.experiencia) || '—')}</td>
+            <td><span class="badge b-mes">${escHtml(row.mes)}</span></td>
+            <td class="fecha-asistir">${escHtml(row.fechasAsistir)}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ═══════════════════════════════════════════
+//  LOAD DATA
+// ═══════════════════════════════════════════
+async function loadData() {
+    const overlay    = document.getElementById('loadingOverlay');
+    const errorBox   = document.getElementById('errorBox');
+    const filterPanel= document.getElementById('filtersPanel');
+    const tableCard  = document.getElementById('tableCard');
+
+    overlay.classList.remove('hidden');
+    errorBox.style.display = 'none';
+
+    try {
+        const [rawF1, rawF2] = await Promise.all([fetchCSV(URL_F1), fetchCSV(URL_F2)]);
+
+        const f1 = processF1(rawF1);
+        const f2 = processF2(rawF2);
+        allData  = buildReport(f1, f2);
+
+        // ── DEFAULT FILTERS ──
+        // TIPO = ACTUAL
+        activeFilters['tipoRegistro2'] = ['ACTUAL'];
+
+        // MES = último mes (orden cronológico) con registros ACTUAL.
+        // Ej.: si existen ENERO, MARZO y JUNIO → por defecto JUNIO.
+        const mesesActual = [...new Set(
+            allData.filter(r => r.tipoRegistro2 === 'ACTUAL' && r.mes).map(r => r.mes)
+        )];
+        let lastMes = null;
+        if (mesesActual.length) {
+            lastMes = mesesActual.reduce((best, m) => monthRank(m) > monthRank(best) ? m : best, mesesActual[0]);
+        }
+        if (lastMes) activeFilters['mes'] = [lastMes];
+
+        filterPanel.style.display = 'block';
+        tableCard.style.display   = 'block';
+
+        initHeaders();
+        renderFilters(allData);
+        renderTable(filtered());
+
+        const now = new Date();
+        document.getElementById('hLastUpdate').textContent =
+            'Actualizado: ' + now.toLocaleDateString('es-PE') + ' ' +
+            now.toLocaleTimeString('es-PE', { hour:'2-digit', minute:'2-digit' });
+
+        nextRefresh = new Date(now.getTime() + REFRESH_MS);
+        updateCountdown();
+
+    } catch (err) {
+        console.error(err);
+        const errDetail = document.getElementById('errDetail');
+        if (errDetail) errDetail.textContent = err.message || String(err);
+        errorBox.style.display  = 'block';
+        filterPanel.style.display = 'none';
+        tableCard.style.display   = 'none';
+    } finally {
+        overlay.classList.add('hidden');
+    }
+}
+
+function updateCountdown() {
+    if (!nextRefresh) return;
+    const diff = nextRefresh - new Date();
+    if (diff <= 0) { loadData(); return; }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const txt = `⏱ Próxima actualización automática en ${h}h ${m}m`;
+    document.getElementById('refreshFooter').textContent = txt;
+    document.getElementById('hNextRefresh').textContent  = `Próxima actualización: ${h}h ${m}m`;
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', e => {
+    if (!e.target.closest('.filter-group')) closeAllDd();
+});
+
+// Auto-refresh
+setInterval(loadData, REFRESH_MS);
+setInterval(updateCountdown, 60_000);
+
+initHeaders();
+loadData();
+</script>
+</body>
+</html>

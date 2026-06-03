@@ -1,0 +1,11 @@
+{
+  "name": "kuyayki-clown-reporte",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reporte / Dashboard de Visita Hospitalaria - Kuyayki Clown",
+  "scripts": {
+    "dev": "npx serve public",
+    "build": "echo \"Sitio estático, no requiere build\" && exit 0"
+  },
+  "license": "UNLICENSED"
+}
