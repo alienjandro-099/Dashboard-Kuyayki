@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KUYAYKI CLOWN – Reporte</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
             --rojo:    #E01A3C;
@@ -153,7 +154,15 @@
         .b-edad { background: var(--naranja); color: #fff; }
         .b-dias { background: var(--verde); color: #fff; }
         .fecha-reg { font-weight: 700; color: var(--morado); }
-        .dni-cell { font-family: monospace; font-size: .82rem; }
+        .dni-cell { font-family: monospace; font-size: .82rem; white-space: nowrap; }
+        .dni-go {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; margin-left: 6px; vertical-align: middle;
+            border: none; border-radius: 50%; cursor: pointer;
+            background: linear-gradient(120deg, var(--morado), var(--azul)); color: #fff;
+            font-size: .72rem; font-weight: 900; line-height: 1; transition: transform .12s, box-shadow .12s;
+        }
+        .dni-go:hover { transform: scale(1.18); box-shadow: 0 2px 8px rgba(123,31,162,.4); }
         .nombre-cell { font-weight: 600; }
         .payaso-cell { font-weight: 700; color: var(--naranja); }
         .fecha-asistir, .small-cell { font-size: .77rem; color: #333; }
@@ -161,21 +170,36 @@
         .no-results .nr-emoji { font-size: 3.5rem; }
 
         /* CUMPLE HIGHLIGHT */
-        .cumple-hero { margin: 16px 0 18px; }
-        .cumple-hero-title { font-size: 1.05rem; font-weight: 900; color: var(--rojo); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-        .hero-cards { display: flex; flex-wrap: wrap; gap: 14px; }
-        .hero-card {
-            flex: 1; min-width: 240px; background: #fff; border-radius: 16px; overflow: hidden;
-            border: 3px solid var(--amarillo); box-shadow: 0 5px 18px rgba(0,0,0,.10);
+        .cumple-hero { margin: 22px 0 24px; text-align: center; }
+        .cumple-hero-title {
+            font-size: 1.15rem; font-weight: 900; color: var(--rojo);
+            margin-bottom: 16px; letter-spacing: .5px;
         }
-        .hero-band { padding: 6px 16px; color: #fff; font-weight: 800; font-size: .8rem; letter-spacing: .5px; }
-        .hero-row { display: flex; }
-        .hero-col { flex: 1; padding: 12px 16px; }
-        .hero-col + .hero-col { border-left: 1px solid #eee; }
-        .hero-name { font-size: 1.25rem; font-weight: 900; color: var(--morado); padding: 10px 16px; }
-        .hero-k { font-size: .68rem; color: #999; text-transform: uppercase; font-weight: 700; }
-        .hero-v { font-size: 1.05rem; font-weight: 800; color: var(--texto); margin-top: 2px; }
+        .hero-cards { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; }
+        .hero-card {
+            width: 100%; max-width: 560px; background: #fff; border-radius: 22px; overflow: hidden;
+            border: 4px solid var(--amarillo);
+            box-shadow: 0 10px 30px rgba(123,31,162,.18);
+            position: relative;
+        }
+        .hero-band {
+            padding: 9px 16px; color: #fff; font-weight: 800; font-size: .82rem; letter-spacing: 1px;
+            text-transform: uppercase;
+            background: linear-gradient(120deg, var(--rojo), var(--naranja), var(--amarillo));
+        }
+        .hero-name {
+            font-size: 1.7rem; font-weight: 900; color: var(--morado);
+            padding: 18px 16px 6px; line-height: 1.15;
+        }
+        .hero-cake { font-size: 2.6rem; margin-top: 6px; }
+        .hero-row { display: flex; border-top: 2px dashed #f0e0c0; margin-top: 12px; }
+        .hero-col { flex: 1; padding: 14px 12px; }
+        .hero-col + .hero-col { border-left: 2px dashed #f0e0c0; }
+        .hero-k { font-size: .66rem; color: #aaa; text-transform: uppercase; font-weight: 800; letter-spacing: .5px; }
+        .hero-v { font-size: 1.15rem; font-weight: 900; color: var(--texto); margin-top: 4px; }
         .hero-v.falta { color: var(--rojo); }
+        .hero-edad { color: var(--naranja); }
+        .hero-conf { position: absolute; font-size: 1.4rem; opacity: .9; }
 
         .refresh-footer { text-align: center; font-size: .73rem; color: #bbb; margin-top: 14px; }
     </style>
@@ -225,7 +249,10 @@
         <div class="table-card" id="card-visita" style="display:none">
             <div class="table-topbar">
                 <span class="table-topbar-title">📊 Visitas Hospitalarias</span>
-                <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+                <span style="display:flex; gap:8px">
+                    <button class="btn-refresh-now" onclick="exportVisitaExcel()">📥 Exportar Excel</button>
+                    <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+                </span>
             </div>
             <div class="table-scroll">
                 <table><thead><tr id="head-visita"></tr></thead><tbody id="body-visita"></tbody></table>
@@ -569,59 +596,86 @@ function fpFiltered(P) { return P.allRows.filter(row => P.defs.every(fd => fpPas
 function fpDataExcluding(P, exceptKey) {
     return P.allRows.filter(row => P.defs.every(fd => fd.key === exceptKey || fpPass(P, fd.key, row)));
 }
+// Construye el HTML interno de un grupo de filtro (botón + dropdown + opciones)
+function fpGroupHTML(pid, fd) {
+    const P = PANELS[pid];
+    const src = fpDataExcluding(P, fd.key);
+    let values = [...new Set(src.map(r => r[fd.key]).filter(v => v !== '' && v != null))];
+    if (fd.key === P.monthKey) values.sort((a,b) => monthRank(a) - monthRank(b));
+    else values.sort((a,b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
+
+    const hasFilter = Object.prototype.hasOwnProperty.call(P.active, fd.key);
+    const sel = P.active[fd.key] || [];
+    const allChecked = !hasFilter;
+
+    const optionsHTML = [
+        `<div class="fdd-option all-opt">
+            <input type="checkbox" class="fp-all" id="${pid}-all-${fd.key}" ${allChecked?'checked':''}
+                   onchange="fpToggleAll('${pid}','${fd.key}', this.checked)">
+            <label for="${pid}-all-${fd.key}" style="cursor:pointer">Seleccionar todo</label>
+        </div>`,
+        ...values.map((v,i) => {
+            const checked = !hasFilter || sel.includes(v);
+            const vSafe = escHtml(v);
+            return `<div class="fdd-option">
+                <input type="checkbox" class="fp-opt" id="${pid}-o-${fd.key}-${i}" value="${vSafe}"
+                       ${checked?'checked':''} onchange="fpLiveChange('${pid}','${fd.key}')">
+                <label for="${pid}-o-${fd.key}-${i}" style="cursor:pointer">${vSafe}</label>
+            </div>`;
+        }),
+    ].join('');
+
+    const labelText = !hasFilter ? 'Todos' : (sel.length === 1 ? sel[0] : `${sel.length} seleccionados`);
+    const badgeText = !hasFilter ? 'Todos' : sel.length;
+    const badgeCls  = !hasFilter ? '' : 'active-filter';
+
+    return `
+        <div class="filter-label">🎪 ${escHtml(fd.label)}</div>
+        <button class="filter-btn" id="${pid}-fbtn-${fd.key}" onclick="fpToggleDd('${pid}','${fd.key}')">
+            <span class="fbtn-label">${escHtml(labelText)}</span>
+            <span class="fbtn-badge ${badgeCls}">${badgeText}</span>
+        </button>
+        <div class="filter-dropdown" id="${pid}-fdd-${fd.key}">
+            <input class="fdd-search" type="text" placeholder="Buscar…" oninput="fpSearch('${pid}','${fd.key}', this.value)">
+            <div class="fdd-options" id="${pid}-fopts-${fd.key}">${optionsHTML}</div>
+            <div class="fdd-footer">
+                <button class="btn-clear-f" style="flex:1" onclick="fpClear('${pid}','${fd.key}')">Limpiar este filtro</button>
+            </div>
+        </div>`;
+}
 function fpRender(pid) {
     const P = PANELS[pid];
     const grid = document.getElementById(P.gridId);
     grid.innerHTML = '';
     P.defs.forEach(fd => {
-        const src = fpDataExcluding(P, fd.key);
-        let values = [...new Set(src.map(r => r[fd.key]).filter(v => v !== '' && v != null))];
-        if (fd.key === P.monthKey) values.sort((a,b) => monthRank(a) - monthRank(b));
-        else values.sort((a,b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
-
-        const hasFilter = Object.prototype.hasOwnProperty.call(P.active, fd.key);
-        const sel = P.active[fd.key] || [];
-        const allChecked = !hasFilter;
-
-        const optionsHTML = [
-            `<div class="fdd-option all-opt">
-                <input type="checkbox" class="fp-all" id="${pid}-all-${fd.key}" ${allChecked?'checked':''}
-                       onchange="fpToggleAll('${pid}','${fd.key}', this.checked)">
-                <label for="${pid}-all-${fd.key}" style="cursor:pointer">Seleccionar todo</label>
-            </div>`,
-            ...values.map((v,i) => {
-                const checked = !hasFilter || sel.includes(v);
-                const vSafe = escHtml(v);
-                return `<div class="fdd-option">
-                    <input type="checkbox" class="fp-opt" id="${pid}-o-${fd.key}-${i}" value="${vSafe}"
-                           ${checked?'checked':''} onchange="fpOptChanged('${pid}','${fd.key}')">
-                    <label for="${pid}-o-${fd.key}-${i}" style="cursor:pointer">${vSafe}</label>
-                </div>`;
-            }),
-        ].join('');
-
-        const labelText = !hasFilter ? 'Todos' : (sel.length === 1 ? sel[0] : `${sel.length} seleccionados`);
-        const badgeText = !hasFilter ? 'Todos' : sel.length;
-        const badgeCls  = !hasFilter ? '' : 'active-filter';
-
         const div = document.createElement('div');
         div.className = 'filter-group';
-        div.innerHTML = `
-            <div class="filter-label">🎪 ${escHtml(fd.label)}</div>
-            <button class="filter-btn" id="${pid}-fbtn-${fd.key}" onclick="fpToggleDd('${pid}','${fd.key}')">
-                <span class="fbtn-label">${escHtml(labelText)}</span>
-                <span class="fbtn-badge ${badgeCls}">${badgeText}</span>
-            </button>
-            <div class="filter-dropdown" id="${pid}-fdd-${fd.key}">
-                <input class="fdd-search" type="text" placeholder="Buscar…" oninput="fpSearch('${pid}','${fd.key}', this.value)">
-                <div class="fdd-options" id="${pid}-fopts-${fd.key}">${optionsHTML}</div>
-                <div class="fdd-footer">
-                    <button class="btn-apply"   onclick="fpApply('${pid}','${fd.key}'); fpCloseDd('${pid}','${fd.key}')">Aplicar</button>
-                    <button class="btn-clear-f" onclick="fpClear('${pid}','${fd.key}')">Limpiar</button>
-                </div>
-            </div>`;
+        div.id = `${pid}-grp-${fd.key}`;
+        div.innerHTML = fpGroupHTML(pid, fd);
         grid.appendChild(div);
     });
+}
+// Reconstruye solo los DEMÁS grupos (cascada), sin tocar el que se está usando
+function fpRefreshOthers(pid, keepKey) {
+    const P = PANELS[pid];
+    P.defs.forEach(fd => {
+        if (fd.key === keepKey) return;
+        const node = document.getElementById(`${pid}-grp-${fd.key}`);
+        if (node) node.innerHTML = fpGroupHTML(pid, fd);
+    });
+}
+// Actualiza en sitio el botón (label + badge) del filtro activo, sin reconstruir su dropdown
+function fpUpdateButton(pid, key) {
+    const P = PANELS[pid];
+    const hasFilter = Object.prototype.hasOwnProperty.call(P.active, key);
+    const sel = P.active[key] || [];
+    const btn = document.getElementById(`${pid}-fbtn-${key}`);
+    if (!btn) return;
+    const lbl = btn.querySelector('.fbtn-label');
+    const bdg = btn.querySelector('.fbtn-badge');
+    lbl.textContent = !hasFilter ? 'Todos' : (sel.length === 1 ? sel[0] : `${sel.length} seleccionados`);
+    bdg.textContent = !hasFilter ? 'Todos' : sel.length;
+    bdg.className = 'fbtn-badge' + (hasFilter ? ' active-filter' : '');
 }
 function fpToggleDd(pid, key) {
     const dd = document.getElementById(`${pid}-fdd-${key}`);
@@ -643,29 +697,28 @@ function fpSearch(pid, key, q) {
         el.style.display = el.querySelector('label').textContent.toLowerCase().includes(lq) ? '' : 'none';
     });
 }
-function fpToggleAll(pid, key, checked) {
-    document.querySelectorAll(`#${pid}-fopts-${key} .fp-opt`).forEach(cb => cb.checked = checked);
-    fpApply(pid, key);
-}
-function fpOptChanged(pid, key) {
-    const opts = [...document.querySelectorAll(`#${pid}-fopts-${key} .fp-opt`)];
-    const all = document.getElementById(`${pid}-all-${key}`);
-    if (all) all.checked = opts.length > 0 && opts.every(cb => cb.checked);
-}
-function fpApply(pid, key) {
+// ── Cambio REACTIVO: al marcar/desmarcar se filtra al instante (estilo Excel)
+function fpLiveChange(pid, key) {
     const P = PANELS[pid];
     const cbs = [...document.querySelectorAll(`#${pid}-fopts-${key} .fp-opt`)];
     const sel = cbs.filter(cb => cb.checked).map(cb => cb.value);
     if (sel.length === cbs.length) delete P.active[key];   // todos = sin filtro
     else P.active[key] = sel;                              // subconjunto (incluye vacío = ninguno)
-    fpRender(pid);
+    // Sincroniza el "Seleccionar todo"
+    const all = document.getElementById(`${pid}-all-${key}`);
+    if (all) all.checked = (sel.length === cbs.length);
+    // Actualiza este botón + tabla + los demás filtros en cascada (sin cerrar este dropdown)
+    fpUpdateButton(pid, key);
     P.onChange(P);
-    fpToggleDd(pid, key);
+    fpRefreshOthers(pid, key);
+}
+function fpToggleAll(pid, key, checked) {
+    document.querySelectorAll(`#${pid}-fopts-${key} .fp-opt`).forEach(cb => cb.checked = checked);
+    fpLiveChange(pid, key);
 }
 function fpClear(pid, key) {
     delete PANELS[pid].active[key];
     fpRender(pid);
-    fpCloseDd(pid, key);
     PANELS[pid].onChange(PANELS[pid]);
 }
 function fpClearAll(pid) {
@@ -689,7 +742,7 @@ function renderVisita(P) {
         const e = norm(row.experiencia); const eB = e.startsWith('s') ? 'b-si' : (e.startsWith('n') ? 'b-no' : '');
         return `<tr>
             <td class="fecha-reg">${escHtml(row.fechaRegistro)}</td>
-            <td class="dni-cell">${escHtml(row.dni)}</td>
+            <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
             <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
             <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
             <td>${escHtml(row.genero)||'—'}</td>
@@ -746,21 +799,69 @@ function renderCumpleHero() {
     if (!cumpleData.length) { host.innerHTML = ''; return; }
     const minDays = cumpleData[0]._days;
     const proximos = cumpleData.filter(c => c._days === minDays);
+    const hoy = minDays === 0;
     const cards = proximos.map(c => `
         <div class="hero-card">
-            <div class="hero-band" style="background:linear-gradient(120deg,var(--rojo),var(--naranja))">🎉 SIGUIENTE CUMPLEAÑER@</div>
+            <span class="hero-conf" style="top:10px;left:14px">🎈</span>
+            <span class="hero-conf" style="top:10px;right:14px">🎊</span>
+            <div class="hero-band">${hoy ? '🎂 ¡HOY CUMPLE AÑOS!' : '🎉 Siguiente cumpleañer@'}</div>
             <div class="hero-name">${escHtml(c.nombreCompleto)}</div>
+            <div class="hero-cake">${hoy ? '🥳🎂🥳' : '🎂'}</div>
             <div class="hero-row">
-                <div class="hero-col"><div class="hero-k">Falta</div><div class="hero-v falta">${escHtml(c.diasTxt)}</div></div>
-                <div class="hero-col"><div class="hero-k">Edad a cumplir</div><div class="hero-v">${escHtml(c.edadACumplir)}</div></div>
+                <div class="hero-col"><div class="hero-k">Falta</div><div class="hero-v falta">${hoy ? '¡Es hoy!' : escHtml(c.diasTxt)}</div></div>
+                <div class="hero-col"><div class="hero-k">Edad a cumplir</div><div class="hero-v hero-edad">${escHtml(c.edadACumplir)}</div></div>
                 <div class="hero-col"><div class="hero-k">Fecha de nacimiento</div><div class="hero-v">${escHtml(c.fechaNac)}</div></div>
             </div>
         </div>`).join('');
-    host.innerHTML = `<div class="cumple-hero-title">⭐ Próximo${proximos.length>1?'s':''} cumpleañer${proximos.length>1?'os':'@'}</div>
+    host.innerHTML = `<div class="cumple-hero-title">⭐ Próximo${proximos.length>1?'s':''} cumpleañer${proximos.length>1?'os':'@'} ⭐</div>
                       <div class="hero-cards">${cards}</div>`;
 }
 function noRows(cols) {
     return `<tr><td colspan="${cols}" class="no-results"><div class="nr-emoji">🤡</div><p>Sin resultados</p></td></tr>`;
+}
+
+// ═══════════════════════════════════════════ NAVEGAR A PAYASITO (filtrado por DNI)
+function goToPayasito(dni) {
+    const P = PANELS.payasitos;
+    if (!P) return;
+    P.active = { dni: [dni] };          // filtra solo por ese DNI (todos sus registros)
+    fpRender('payasitos');
+    renderPayasitos(P);
+    showSection('payasitos');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════ EXPORTAR EXCEL (participantes por visita)
+// Replica la macro VBA: agrupa por "Fechas Asistir", y por cada fecha lista
+// Celular y Nombre Completo, con encabezado por grupo y 2 filas en blanco entre grupos.
+function exportVisitaExcel() {
+    const P = PANELS.visita;
+    if (!P) return;
+    const data = fpFiltered(P);
+    if (!data.length) { alert('No hay registros para exportar con los filtros actuales.'); return; }
+
+    // Agrupar por Fechas Asistir
+    const grupos = {};
+    data.forEach(r => {
+        const k = r.fechasAsistir || '';
+        if (!k) return;
+        (grupos[k] = grupos[k] || []).push(r);
+    });
+
+    const claves = Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'es'));
+    const aoa = [];   // array de arrays (filas)
+    claves.forEach(clave => {
+        aoa.push(['Fechas Asistir', 'Celular', 'Nombre Completo']);   // encabezado del grupo
+        grupos[clave].forEach(r => aoa.push([clave, r.celular || '', r.nombreCompleto || '']));
+        aoa.push([]);   // 2 filas en blanco
+        aoa.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 52 }, { wch: 18 }, { wch: 34 }];   // anchos aprox (AutoFit)
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Participantes');
+    XLSX.writeFile(wb, 'Participantes por visita.xlsx');
 }
 
 // ═══════════════════════════════════════════ TABS
