@@ -201,6 +201,26 @@
         .hero-edad { color: var(--naranja); }
         .hero-conf { position: absolute; font-size: 1.4rem; opacity: .9; }
 
+        /* ESTADÍSTICAS */
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 16px 0 20px; }
+        .kpi-card {
+            background: #fff; border-radius: 16px; padding: 16px 12px; text-align: center;
+            border: 3px solid var(--amarillo); box-shadow: 0 4px 14px rgba(0,0,0,.08);
+        }
+        .kpi-icon { font-size: 1.5rem; }
+        .kpi-val { font-size: 1.9rem; font-weight: 900; color: var(--morado); line-height: 1.1; margin-top: 2px; }
+        .kpi-lbl { font-size: .68rem; color: #999; text-transform: uppercase; font-weight: 800; margin-top: 4px; letter-spacing: .3px; }
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
+        .chart-card { background: #fff; border-radius: 18px; padding: 16px 18px; border: 3px solid var(--morado); box-shadow: 0 4px 18px rgba(0,0,0,.08); }
+        .chart-title { font-weight: 800; color: var(--rojo); margin-bottom: 14px; font-size: .95rem; }
+        .chart-body { max-height: 360px; overflow-y: auto; }
+        .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .bar-label { width: 165px; font-size: .75rem; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; font-weight: 600; }
+        .bar-track { flex: 1; background: #f1f0f5; border-radius: 8px; height: 20px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 8px; min-width: 2px; transition: width .3s; }
+        .bar-val { font-size: .74rem; font-weight: 800; color: #555; width: 34px; text-align: left; flex-shrink: 0; }
+        .chart-empty { color: #bbb; text-align: center; padding: 22px; }
+
         .refresh-footer { text-align: center; font-size: .73rem; color: #bbb; margin-top: 14px; }
     </style>
 </head>
@@ -227,6 +247,7 @@
     <button class="tab active" data-sec="visita"    onclick="showSection('visita')">🏥 Visita Hospitalaria</button>
     <button class="tab"        data-sec="cumple"    onclick="showSection('cumple')">🎂 Cumpleaños</button>
     <button class="tab"        data-sec="payasitos" onclick="showSection('payasitos')">🤡 Información de los Payasitos</button>
+    <button class="tab"        data-sec="stats"     onclick="showSection('stats')">📈 Estadísticas</button>
 </nav>
 
 <div class="main">
@@ -291,6 +312,29 @@
             </div>
             <div class="table-scroll">
                 <table><thead><tr id="head-payasitos"></tr></thead><tbody id="body-payasitos"></tbody></table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ══════════ SECCIÓN ESTADÍSTICAS ══════════ -->
+    <section id="sec-stats" hidden>
+        <div class="filters-panel" id="panel-estadisticas" style="display:none">
+            <div class="filters-title">🎨 Segmentación – Estadísticas</div>
+            <div class="filters-grid" id="grid-estadisticas"></div>
+            <div class="filters-bar">
+                <button class="btn-clear-all" onclick="fpClearAll('estadisticas')">✕ Limpiar todos</button>
+                <span class="results-info">Estadísticas sobre <strong id="stats-count">0</strong> participaciones</span>
+            </div>
+        </div>
+        <div id="card-estadisticas" style="display:none">
+            <div class="kpi-row" id="kpi-row"></div>
+            <div class="charts-grid">
+                <div class="chart-card"><div class="chart-title">🏆 Ranking de payasitos por nº de visitas</div><div class="chart-body" id="chart-payasos"></div></div>
+                <div class="chart-card"><div class="chart-title">📅 Visitas por mes</div><div class="chart-body" id="chart-meses"></div></div>
+                <div class="chart-card"><div class="chart-title">🏥 Visitas por lugar / hospital</div><div class="chart-body" id="chart-lugares"></div></div>
+                <div class="chart-card"><div class="chart-title">📆 Visitas por día de la semana</div><div class="chart-body" id="chart-dias"></div></div>
+                <div class="chart-card"><div class="chart-title">⚧ Distribución por género</div><div class="chart-body" id="chart-genero"></div></div>
+                <div class="chart-card"><div class="chart-title">🎖 Distribución por experiencia</div><div class="chart-body" id="chart-exp"></div></div>
             </div>
         </div>
     </section>
@@ -820,6 +864,97 @@ function noRows(cols) {
     return `<tr><td colspan="${cols}" class="no-results"><div class="nr-emoji">🤡</div><p>Sin resultados</p></td></tr>`;
 }
 
+// ═══════════════════════════════════════════ ESTADÍSTICAS
+function lugarDe(f) {
+    if (!f) return '(Sin dato)';
+    const p = f.split('–');
+    if (p.length >= 3) return p[1].trim();
+    if (p.length === 2) return (p[1].replace(/\s*-\s*\d.*$/, '').trim()) || f.trim();
+    return f.trim();
+}
+function diaSemanaDe(f) {
+    if (!f) return '(Sin dato)';
+    const m = f.trim().match(/^([A-Za-zÁÉÍÓÚáéíóú]+)/);
+    return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() : '(Sin dato)';
+}
+const DIA_ORDER = ['Lunes','Martes','Miércoles','Miercoles','Jueves','Viernes','Sábado','Sabado','Domingo'];
+const diaRank = d => { const i = DIA_ORDER.indexOf(d); return i < 0 ? 99 : i; };
+
+function countBy(arr, fn) {
+    const m = {};
+    arr.forEach(x => { const k = fn(x) || '(Sin dato)'; m[k] = (m[k] || 0) + 1; });
+    return m;
+}
+function topN(obj, n) {
+    return Object.entries(obj).map(([label, value]) => ({ label, value }))
+        .sort((a, b) => b.value - a.value).slice(0, n);
+}
+function kpiRow(items) {
+    document.getElementById('kpi-row').innerHTML = items.map(k =>
+        `<div class="kpi-card"><div class="kpi-icon">${k.icon}</div>
+         <div class="kpi-val">${escHtml(k.val)}</div>
+         <div class="kpi-lbl">${escHtml(k.lbl)}</div></div>`).join('');
+}
+function barChart(elId, rows, grad) {
+    const el = document.getElementById(elId);
+    if (!rows.length) { el.innerHTML = '<div class="chart-empty">Sin datos para los filtros actuales</div>'; return; }
+    const max = Math.max(...rows.map(r => r.value));
+    el.innerHTML = rows.map(r => {
+        const pct = max ? (r.value / max * 100) : 0;
+        return `<div class="bar-row">
+            <div class="bar-label" title="${escHtml(r.label)}">${escHtml(r.label)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${grad}"></div></div>
+            <div class="bar-val">${r.value}</div>
+        </div>`;
+    }).join('');
+}
+function renderEstadisticas(P) {
+    const data = fpFiltered(P);
+    document.getElementById('stats-count').textContent = data.length;
+    document.getElementById('card-estadisticas').style.display = 'block';
+
+    const payasos = new Set(data.map(r => r.dni));
+    const eventos = new Set(data.map(r => r.fechasAsistir));
+    const lugares = new Set(data.map(r => lugarDe(r.fechasAsistir)));
+    const prom = payasos.size ? (data.length / payasos.size) : 0;
+
+    kpiRow([
+        { icon:'🎟️', val: data.length,   lbl:'Visitas (participaciones)' },
+        { icon:'🤡', val: payasos.size,  lbl:'Payasitos únicos' },
+        { icon:'📅', val: eventos.size,  lbl:'Eventos / fechas' },
+        { icon:'🏥', val: lugares.size,  lbl:'Lugares' },
+        { icon:'📊', val: prom.toFixed(1), lbl:'Prom. visitas/payasito' },
+    ]);
+
+    // Ranking payasitos (top 15)
+    const byPayaso = countBy(data, r => r.payaso || r.nombreCompleto || r.dni);
+    barChart('chart-payasos', topN(byPayaso, 15), 'linear-gradient(90deg,var(--naranja),var(--rojo))');
+
+    // Por mes (orden cronológico)
+    const byMes = countBy(data, r => r.mes);
+    const mesesRows = Object.entries(byMes).map(([label, value]) => ({ label, value }))
+        .sort((a, b) => monthRank(a.label) - monthRank(b.label));
+    barChart('chart-meses', mesesRows, 'linear-gradient(90deg,var(--azul),var(--celeste))');
+
+    // Por lugar (top 12)
+    const byLugar = countBy(data, r => lugarDe(r.fechasAsistir));
+    barChart('chart-lugares', topN(byLugar, 12), 'linear-gradient(90deg,var(--verde),#9CCC65)');
+
+    // Por día de la semana (orden natural)
+    const byDia = countBy(data, r => diaSemanaDe(r.fechasAsistir));
+    const diasRows = Object.entries(byDia).map(([label, value]) => ({ label, value }))
+        .sort((a, b) => diaRank(a.label) - diaRank(b.label));
+    barChart('chart-dias', diasRows, 'linear-gradient(90deg,var(--morado),var(--celeste))');
+
+    // Por género
+    const byGen = countBy(data, r => r.genero || '(Sin dato)');
+    barChart('chart-genero', topN(byGen, 10), 'linear-gradient(90deg,var(--morado),var(--azul))');
+
+    // Por experiencia
+    const byExp = countBy(data, r => r.experiencia || '(Sin dato)');
+    barChart('chart-exp', topN(byExp, 10), 'linear-gradient(90deg,#F4681B,var(--amarillo))');
+}
+
 // ═══════════════════════════════════════════ NAVEGAR A PAYASITO (filtrado por DNI)
 function goToPayasito(dni) {
     const P = PANELS.payasitos;
@@ -866,7 +1001,7 @@ function exportVisitaExcel() {
 
 // ═══════════════════════════════════════════ TABS
 function showSection(name) {
-    ['visita','cumple','payasitos'].forEach(s => {
+    ['visita','cumple','payasitos','stats'].forEach(s => {
         document.getElementById('sec-'+s).hidden = (s !== name);
     });
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.sec === name));
@@ -922,6 +1057,20 @@ async function loadData() {
                 { key:'tipo',          label:'TIPO REGISTRO' },
             ],
             allRows: payasitosData, defaults: { tipo: ['ACTUAL'] }, onChange: renderPayasitos,
+        });
+        makeFilterPanel({
+            id:'estadisticas', gridId:'grid-estadisticas', panelId:'panel-estadisticas', cardId:'card-estadisticas',
+            defs:[
+                { key:'dni',           label:'DNI' },
+                { key:'nombreCompleto',label:'NOMBRE' },
+                { key:'payaso',        label:'PAYASO' },
+                { key:'genero',        label:'GÉNERO' },
+                { key:'experiencia',   label:'EXPERIENCIA' },
+                { key:'tipoRegistro2', label:'TIPO' },
+                { key:'mes',           label:'MES' },
+                { key:'fechasAsistir', label:'FECHA / EVENTO' },
+            ],
+            allRows: visitaData, defaults: { tipoRegistro2: ['ACTUAL'] }, monthKey:'mes', onChange: renderEstadisticas,
         });
         renderCumple();
 
