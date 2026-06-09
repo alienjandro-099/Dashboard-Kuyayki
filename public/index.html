@@ -457,6 +457,8 @@ function cleanPhone(raw) {
     return raw.trim();
 }
 function only9(raw) { const d = (raw||'').replace(/[^0-9]/g, ''); return d.slice(-9); }
+// Corrige error humano: "O" (letra) al inicio del DNI → "0" (cero). Ej: O7402152 → 07402152
+function normDNI(s) { return (s||'').trim().replace(/^[Oo]+/, m => '0'.repeat(m.length)); }
 
 // ── Cumpleaños helpers
 function calcAge(dob, today) {
@@ -506,13 +508,13 @@ function processF1(raw) {
 
     const maxTS = {};
     rows.forEach(row => {
-        const dni = get(row,iDNI); const mes = get(row,iMes); if (!dni) return;
+        const dni = normDNI(get(row,iDNI)); const mes = get(row,iMes); if (!dni) return;
         const key = `${dni}||${mes}`; const ts = parseTS(get(row,iMarca)); if (!ts) return;
         if (!maxTS[key] || ts > maxTS[key]) maxTS[key] = ts;
     });
     const out = [];
     rows.forEach(row => {
-        const dni = get(row,iDNI); if (!dni) return;
+        const dni = normDNI(get(row,iDNI)); if (!dni) return;
         const marcaStr = get(row,iMarca);
         const mes = get(row,iMes).toUpperCase();
         const exp = get(row,iExp);
@@ -553,14 +555,14 @@ function processF2(raw) {
 
     const maxTS = {};
     rows.forEach(row => {
-        const dni = get(row,I.dni); if (!dni) return;
+        const dni = normDNI(get(row,I.dni)); if (!dni) return;
         const ts = parseTSf2(get(row,I.marca)); if (!ts) return;
         if (!maxTS[dni] || ts > maxTS[dni]) maxTS[dni] = ts;
     });
 
     const built = [];
     rows.forEach(row => {
-        const dni = get(row,I.dni); if (!dni) return;
+        const dni = normDNI(get(row,I.dni)); if (!dni) return;
         const ts = parseTSf2(get(row,I.marca));
         const tipo = (ts && maxTS[dni] && ts.getTime() === maxTS[dni].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
         const nombreCompleto = [get(row,I.nombres), get(row,I.apPat), get(row,I.apMat)]
