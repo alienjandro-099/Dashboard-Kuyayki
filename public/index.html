@@ -449,6 +449,15 @@ function fmtDDMMYYYY(d) {
     if (!d) return '';
     return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
 }
+// Fecha de llenado: dd/mm/yyyy + hora 12h con a. m./p. m.
+function fmtFechaHora(d) {
+    if (!d || isNaN(d)) return '';
+    let h = d.getHours();
+    const min = String(d.getMinutes()).padStart(2,'0');
+    const ap = h < 12 ? 'a. m.' : 'p. m.';
+    h = h % 12; if (h === 0) h = 12;
+    return fmtDDMMYYYY(d) + ' ' + h + ':' + min + ' ' + ap;
+}
 function cleanPhone(raw) {
     if (!raw) return '';
     const digits = raw.replace(/[^0-9]/g, '');
@@ -586,7 +595,7 @@ function processF2(raw) {
             traje:    get(row,I.traje),
             emergNum: get(row,I.emgNum),
             emergNom: get(row,I.emgNom),
-            fechaRegistro: get(row,I.marca),
+            fechaRegistro: fmtFechaHora(ts),
             tipo,
         });
     });
@@ -600,7 +609,7 @@ function buildVisita(f1, lookup) {
     return f1.map(r => {
         const p = lookup[r.dni] || {};
         return {
-            fechaRegistro: fmtDDMM(r.marcaStr), _ts: r.marcaStr,
+            fechaRegistro: fmtFechaHora(parseTS(r.marcaStr)), _ts: r.marcaStr,
             dni: r.dni,
             nombreCompleto: p.nombreCompleto || '',
             payaso: p.payaso || '', genero: p.genero || '',
