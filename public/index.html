@@ -368,6 +368,7 @@ const VISITA_COLS = [
     { key:'correo',        label:'Correo' },
     { key:'celular',       label:'Celular' },
     { key:'experiencia',   label:'Experiencia' },
+    { key:'tipoRegistro2', label:'Tipo' },
     { key:'mes',           label:'Mes' },
     { key:'fechasAsistir', label:'Fechas Asistir' },
 ];
@@ -804,6 +805,7 @@ function renderVisita(P) {
             <td><small>${escHtml(row.correo)||'—'}</small></td>
             <td><small>${escHtml(row.celular)||'—'}</small></td>
             <td>${row.experiencia&&eB?`<span class="badge ${eB}">${escHtml(row.experiencia)}</span>`:(escHtml(row.experiencia)||'—')}</td>
+            <td><span class="badge ${row.tipoRegistro2==='ACTUAL'?'b-actual':'b-historico'}">${escHtml(row.tipoRegistro2)}</span></td>
             <td><span class="badge b-mes">${escHtml(row.mes)}</span></td>
             <td class="fecha-asistir">${escHtml(row.fechasAsistir)}</td>
         </tr>`;
