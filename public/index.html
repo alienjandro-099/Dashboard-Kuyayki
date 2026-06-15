@@ -79,6 +79,23 @@
 
         .main { max-width: 1700px; margin: 0 auto; padding: 0 16px 40px; }
         section[hidden] { display: none; }
+        #view-no[hidden], #view-asist[hidden] { display: none; }
+
+        /* SUB-TABS (dentro de Visita) */
+        .subtabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 4px; }
+        .subtab {
+            border: 2px solid #e3e3e3; background: #fff; color: #777;
+            padding: 7px 16px; border-radius: 12px; font-size: .85rem; font-weight: 800;
+            cursor: pointer; transition: all .18s; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .subtab:hover { color: var(--rojo); border-color: var(--naranja); }
+        .subtab.active { color: #fff; background: linear-gradient(120deg, var(--morado), var(--azul)); border-color: var(--amarillo); }
+        .subtab-count {
+            background: var(--rojo); color: #fff; border-radius: 10px;
+            padding: 1px 8px; font-size: .72rem; font-weight: 800; min-width: 20px; text-align: center;
+        }
+        .subtab.active .subtab-count { background: rgba(255,255,255,.3); }
+        .motivo-cell { font-size: .77rem; color: #444; max-width: 420px; white-space: normal; line-height: 1.35; }
 
         /* ERROR */
         .error-box {
@@ -259,24 +276,53 @@
 
     <!-- ══════════ SECCIÓN VISITA ══════════ -->
     <section id="sec-visita">
-        <div class="filters-panel" id="panel-visita" style="display:none">
-            <div class="filters-title">🎨 Segmentación – Visita Hospitalaria Mes</div>
-            <div class="filters-grid" id="grid-visita"></div>
-            <div class="filters-bar">
-                <button class="btn-clear-all" onclick="fpClearAll('visita')">✕ Limpiar todos</button>
-                <span class="results-info">Mostrando <strong id="visita-shown">0</strong> de <strong id="visita-total">0</strong> registros</span>
+        <div class="subtabs">
+            <button id="subtab-asist" class="subtab active" onclick="showVisitaView('asist')">✅ Asistencias</button>
+            <button id="subtab-no"    class="subtab"        onclick="showVisitaView('no')">🚫 No participan este mes <span class="subtab-count" id="np-count">0</span></button>
+        </div>
+
+        <!-- Vista: Asistencias -->
+        <div id="view-asist">
+            <div class="filters-panel" id="panel-visita" style="display:none">
+                <div class="filters-title">🎨 Segmentación – Visita Hospitalaria Mes</div>
+                <div class="filters-grid" id="grid-visita"></div>
+                <div class="filters-bar">
+                    <button class="btn-clear-all" onclick="fpClearAll('visita')">✕ Limpiar todos</button>
+                    <span class="results-info">Mostrando <strong id="visita-shown">0</strong> de <strong id="visita-total">0</strong> registros</span>
+                </div>
+            </div>
+            <div class="table-card" id="card-visita" style="display:none">
+                <div class="table-topbar">
+                    <span class="table-topbar-title">📊 Visitas Hospitalarias</span>
+                    <span style="display:flex; gap:8px">
+                        <button class="btn-refresh-now" onclick="exportVisitaExcel()">📥 Exportar Excel</button>
+                        <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+                    </span>
+                </div>
+                <div class="table-scroll">
+                    <table><thead><tr id="head-visita"></tr></thead><tbody id="body-visita"></tbody></table>
+                </div>
             </div>
         </div>
-        <div class="table-card" id="card-visita" style="display:none">
-            <div class="table-topbar">
-                <span class="table-topbar-title">📊 Visitas Hospitalarias</span>
-                <span style="display:flex; gap:8px">
-                    <button class="btn-refresh-now" onclick="exportVisitaExcel()">📥 Exportar Excel</button>
-                    <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
-                </span>
+
+        <!-- Vista: No participan este mes -->
+        <div id="view-no" hidden>
+            <div class="filters-panel" id="panel-noparticipa" style="display:none">
+                <div class="filters-title">🎨 Segmentación – No participan este mes</div>
+                <div class="filters-grid" id="grid-noparticipa"></div>
+                <div class="filters-bar">
+                    <button class="btn-clear-all" onclick="fpClearAll('noparticipa')">✕ Limpiar todos</button>
+                    <span class="results-info">Mostrando <strong id="noparticipa-shown">0</strong> de <strong id="noparticipa-total">0</strong> registros</span>
+                </div>
             </div>
-            <div class="table-scroll">
-                <table><thead><tr id="head-visita"></tr></thead><tbody id="body-visita"></tbody></table>
+            <div class="table-card" id="card-noparticipa" style="display:none; border-color:var(--rojo)">
+                <div class="table-topbar" style="background:linear-gradient(120deg,var(--rojo),var(--naranja))">
+                    <span class="table-topbar-title">🚫 No podrán participar este mes</span>
+                    <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+                </div>
+                <div class="table-scroll">
+                    <table><thead><tr id="head-noparticipa"></tr></thead><tbody id="body-noparticipa"></tbody></table>
+                </div>
             </div>
         </div>
     </section>
@@ -396,9 +442,21 @@ const PAY_COLS = [
     { key:'emergNom',      label:'Contacto de emergencia (Nombre Completo)' },
     { key:'fechaRegistro', label:'Fecha de Registro' },
 ];
+const NOPART_COLS = [
+    { key:'fechaRegistro', label:'Fecha de Registro' },
+    { key:'dni',           label:'DNI' },
+    { key:'nombreCompleto',label:'Nombre Completo' },
+    { key:'payaso',        label:'Payasito' },
+    { key:'genero',        label:'Género' },
+    { key:'correo',        label:'Correo' },
+    { key:'celular',       label:'Celular' },
+    { key:'tipoRegistro2', label:'Tipo' },
+    { key:'mes',           label:'Mes' },
+    { key:'motivo',        label:'Motivo de inasistencia' },
+];
 
 // ═══════════════════════════════════════════ STATE
-let visitaData = [], payasitosData = [], cumpleData = [];
+let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [];
 let nextRefresh = null;
 const PANELS = {};
 
@@ -503,41 +561,58 @@ async function fetchCSV(url) {
     });
 }
 
-// ═══════════════════════════════════════════ PROCESS F1 (visita)
+// ═══════════════════════════════════════════ PROCESS F1 (visita) → { visitas, noParticipa }
 function processF1(raw) {
     const valid = raw.filter(row => row.filter(c => c && c.trim()).length >= 4);
-    if (valid.length < 2) return [];
+    if (valid.length < 2) return { visitas: [], noParticipa: [] };
     const headers = valid[0], rows = valid.slice(1);
     const iMarca = headers.indexOf(findCol(headers, ['Marca temporal']));
     const iMes   = headers.indexOf(findCol(headers, ['Mes de registro']));
     const iDNI   = headers.indexOf(findCol(headers, ['Ingresa tu DNI', 'INGRESA TU DNI']));
     const iExp   = headers.indexOf(findCol(headers, ['experiencia en hospitales', 'Experiencia']));
+    const iPodra = headers.indexOf(findCol(headers, ['Podrás participar en los voluntariados', 'podras participar', 'participar en los voluntariados']));
+    const iMotivo= headers.indexOf(findCol(headers, ['motivo de tu inasistencia', 'conocer mejor el motivo']));
     const fechaIdxs = headers.map((h,i)=>({h,i})).filter(x =>
         norm(x.h).includes('cuales de las siguientes fechas') || norm(x.h).includes('fechas puedes asistir'));
-    if (iMarca < 0 || iDNI < 0) return [];
+    if (iMarca < 0 || iDNI < 0) return { visitas: [], noParticipa: [] };
     const get = (row,i) => (i>=0 && i<row.length) ? (row[i]||'').trim() : '';
+    const esNo = row => { const v = norm(get(row, iPodra)); return iPodra >= 0 && v.startsWith('n'); };
 
-    const maxTS = {};
+    // Máximo timestamp por DNI+Mes (visitas) y por DNI (no participa)
+    const maxTS = {}, maxTSnp = {};
     rows.forEach(row => {
-        const dni = normDNI(get(row,iDNI)); const mes = get(row,iMes); if (!dni) return;
-        const key = `${dni}||${mes}`; const ts = parseTS(get(row,iMarca)); if (!ts) return;
-        if (!maxTS[key] || ts > maxTS[key]) maxTS[key] = ts;
+        const dni = normDNI(get(row,iDNI)); if (!dni) return;
+        const ts = parseTS(get(row,iMarca)); if (!ts) return;
+        if (esNo(row)) {
+            if (!maxTSnp[dni] || ts > maxTSnp[dni]) maxTSnp[dni] = ts;
+        } else {
+            const key = `${dni}||${get(row,iMes)}`;
+            if (!maxTS[key] || ts > maxTS[key]) maxTS[key] = ts;
+        }
     });
-    const out = [];
+
+    const visitas = [], noParticipa = [];
     rows.forEach(row => {
         const dni = normDNI(get(row,iDNI)); if (!dni) return;
         const marcaStr = get(row,iMarca);
         const mes = get(row,iMes).toUpperCase();
+        const ts = parseTS(marcaStr);
+
+        if (esNo(row)) {
+            const tipo = (ts && maxTSnp[dni] && ts.getTime() === maxTSnp[dni].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
+            noParticipa.push({ marcaStr, mes, dni, tipo, motivo: get(row, iMotivo) });
+            return;
+        }
+
         const exp = get(row,iExp);
         const key = `${dni}||${get(row,iMes)}`;
-        const ts = parseTS(marcaStr);
         const tipo = (ts && maxTS[key] && ts.getTime() === maxTS[key].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
         const fechasRaw = fechaIdxs.map(x=>get(row,x.i)).filter(Boolean).join(', ');
         const fechas = fechasRaw.split(',').map(f => { const c=f.trim(); return FECHA_REPLACEMENTS[c]||c; }).filter(Boolean);
         if (!fechas.length) return;
-        fechas.forEach(fecha => out.push({ marcaStr, mes, dni, exp, tipo, fecha }));
+        fechas.forEach(fecha => visitas.push({ marcaStr, mes, dni, exp, tipo, fecha }));
     });
-    return out;
+    return { visitas, noParticipa };
 }
 
 // ═══════════════════════════════════════════ PROCESS F2 (payasitos) → { rows, lookup }
@@ -618,6 +693,19 @@ function buildVisita(f1, lookup) {
             correo: p.correo || '', celular: p.celular || '',
             experiencia: r.exp || '', tipoRegistro2: r.tipo,
             mes: r.mes, fechasAsistir: r.fecha,
+        };
+    });
+}
+function buildNoParticipa(rows, lookup) {
+    return rows.map(r => {
+        const p = lookup[r.dni] || {};
+        return {
+            fechaRegistro: fmtFechaHora(parseTS(r.marcaStr)), _ts: r.marcaStr,
+            dni: r.dni,
+            nombreCompleto: p.nombreCompleto || '',
+            payaso: p.payaso || '', genero: p.genero || '',
+            correo: p.correo || '', celular: p.celular || '',
+            tipoRegistro2: r.tipo, mes: r.mes, motivo: r.motivo || '',
         };
     });
 }
@@ -811,6 +899,25 @@ function renderVisita(P) {
             <td class="fecha-asistir">${escHtml(row.fechasAsistir)}</td>
         </tr>`;
     }).join('');
+}
+function renderNoParticipa(P) {
+    const data = fpFiltered(P);
+    document.getElementById('noparticipa-shown').textContent = data.length;
+    document.getElementById('noparticipa-total').textContent = P.allRows.length;
+    const tbody = document.getElementById('body-noparticipa');
+    if (!data.length) { tbody.innerHTML = noRows(NOPART_COLS.length); return; }
+    tbody.innerHTML = data.map(row => `<tr>
+        <td class="fecha-reg">${escHtml(row.fechaRegistro)}</td>
+        <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
+        <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+        <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+        <td>${escHtml(row.genero)||'—'}</td>
+        <td><small>${escHtml(row.correo)||'—'}</small></td>
+        <td><small>${escHtml(row.celular)||'—'}</small></td>
+        <td><span class="badge ${row.tipoRegistro2==='ACTUAL'?'b-actual':'b-historico'}">${escHtml(row.tipoRegistro2)}</span></td>
+        <td>${row.mes?`<span class="badge b-mes">${escHtml(row.mes)}</span>`:'—'}</td>
+        <td class="motivo-cell">${row.motivo?escHtml(row.motivo):'<em style="color:#ccc">Sin especificar</em>'}</td>
+    </tr>`).join('');
 }
 function renderPayasitos(P) {
     const data = fpFiltered(P);
@@ -1022,6 +1129,14 @@ function showSection(name) {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.sec === name));
     fpCloseAll();
 }
+// Sub-vista dentro de Visita: 'asist' (asistencias) | 'no' (no participan este mes)
+function showVisitaView(v) {
+    document.getElementById('view-asist').hidden = (v !== 'asist');
+    document.getElementById('view-no').hidden    = (v !== 'no');
+    document.getElementById('subtab-asist').classList.toggle('active', v === 'asist');
+    document.getElementById('subtab-no').classList.toggle('active', v === 'no');
+    fpCloseAll();
+}
 
 // ═══════════════════════════════════════════ LOAD
 async function loadData() {
@@ -1034,9 +1149,10 @@ async function loadData() {
         const f2 = processF2(rawF2);
         const f1 = processF1(rawF1);
 
-        visitaData    = buildVisita(f1, f2.lookup);
-        payasitosData = f2.rows;
-        cumpleData    = buildCumple(f2.lookup);
+        visitaData     = buildVisita(f1.visitas, f2.lookup);
+        noParticipaData = buildNoParticipa(f1.noParticipa, f2.lookup);
+        payasitosData  = f2.rows;
+        cumpleData     = buildCumple(f2.lookup);
 
         // Default MES (visita) = último mes cronológico con registros ACTUAL
         const mesesActual = [...new Set(visitaData.filter(r => r.tipoRegistro2 === 'ACTUAL' && r.mes).map(r => r.mes))];
@@ -1047,6 +1163,7 @@ async function loadData() {
 
         // Paneles
         setHeaders('head-visita', VISITA_COLS);
+        setHeaders('head-noparticipa', NOPART_COLS);
         setHeaders('head-payasitos', PAY_COLS);
 
         makeFilterPanel({
@@ -1060,6 +1177,17 @@ async function loadData() {
             ],
             allRows: visitaData, defaults: visitaDefaults, monthKey:'mes', onChange: renderVisita,
         });
+        makeFilterPanel({
+            id:'noparticipa', gridId:'grid-noparticipa', panelId:'panel-noparticipa', cardId:'card-noparticipa',
+            defs:[
+                { key:'dni',           label:'DNI' },
+                { key:'nombreCompleto',label:'NOMBRE' },
+                { key:'tipoRegistro2', label:'TIPO' },
+                { key:'mes',           label:'MES' },
+            ],
+            allRows: noParticipaData, defaults: { tipoRegistro2: ['ACTUAL'] }, monthKey:'mes', onChange: renderNoParticipa,
+        });
+        document.getElementById('np-count').textContent = noParticipaData.filter(r => r.tipoRegistro2 === 'ACTUAL').length;
         makeFilterPanel({
             id:'payasitos', gridId:'grid-payasitos', panelId:'panel-payasitos', cardId:'card-payasitos',
             defs:[
