@@ -578,59 +578,60 @@ function processF1(raw) {
     const get = (row,i) => (i>=0 && i<row.length) ? (row[i]||'').trim() : '';
     const esNo = row => { const v = norm(get(row, iPodra)); return iPodra >= 0 && v.startsWith('n'); };
 
-    // Máximo timestamp por DNI+Mes (visitas) y por DNI (no participa)
-    const maxTS = {}, maxTSnp = {};
-    rows.forEach(row => {
-        const dni = normDNI(get(row,iDNI)); if (!dni) return;
-        const ts = parseTS(get(row,iMarca)); if (!ts) return;
-        if (esNo(row)) {
-            if (!maxTSnp[dni] || ts > maxTSnp[dni]) maxTSnp[dni] = ts;
-        } else {
-            const key = `${dni}||${get(row,iMes)}`;
-            if (!maxTS[key] || ts > maxTS[key]) maxTS[key] = ts;
-        }
-    });
-
-    const visitas = [], noParticipa = [];
+    // 1) Recolectar todos los registros (participación y "no participa")
+    const subs = [];
     rows.forEach(row => {
         const dni = normDNI(get(row,iDNI)); if (!dni) return;
         const marcaStr = get(row,iMarca);
-        const mes = get(row,iMes).toUpperCase();
         const ts = parseTS(marcaStr);
-
+        const mes = get(row,iMes).toUpperCase();
         if (esNo(row)) {
-            const tipo = (ts && maxTSnp[dni] && ts.getTime() === maxTSnp[dni].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
-            noParticipa.push({ marcaStr, mes, dni, tipo, motivo: get(row, iMotivo) });
-            return;
+            subs.push({ kind:'no', dni, marcaStr, ts, mes, motivo: get(row, iMotivo) });
+        } else {
+            const fechasRaw = fechaIdxs.map(x=>get(row,x.i)).filter(Boolean).join(', ');
+            const fechas = fechasRaw.split(',').map(f => { const c=f.trim(); return FECHA_REPLACEMENTS[c]||c; }).filter(Boolean);
+            if (!fechas.length) return;
+            subs.push({ kind:'visita', dni, marcaStr, ts, mes, exp: get(row,iExp), fechas });
         }
-
-        const exp = get(row,iExp);
-        const key = `${dni}||${get(row,iMes)}`;
-        const tipo = (ts && maxTS[key] && ts.getTime() === maxTS[key].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
-        const fechasRaw = fechaIdxs.map(x=>get(row,x.i)).filter(Boolean).join(', ');
-        const fechas = fechasRaw.split(',').map(f => { const c=f.trim(); return FECHA_REPLACEMENTS[c]||c; }).filter(Boolean);
-        if (!fechas.length) return;
-        fechas.forEach(fecha => visitas.push({ marcaStr, mes, dni, exp, tipo, fecha }));
     });
 
-    // Para "no participa" no se registró el mes → lo inferimos.
-    // Usamos el mes dominante que usaron las visitas registradas en el mismo
-    // mes calendario (la marca temporal). Ej.: registros de junio → "JUNIO".
-    const mesPorCalendario = {};   // mesCalendario(0-11) -> { MES: conteo }
-    visitas.forEach(v => {
-        const ts = parseTS(v.marcaStr); if (!ts || !v.mes) return;
-        const mk = ts.getMonth();
+    // 2) Mes dominante por mes calendario (de las participaciones con mes explícito)
+    const mesPorCalendario = {};
+    subs.forEach(s => {
+        if (s.kind !== 'visita' || !s.ts || !s.mes) return;
+        const mk = s.ts.getMonth();
         (mesPorCalendario[mk] = mesPorCalendario[mk] || {});
-        mesPorCalendario[mk][v.mes] = (mesPorCalendario[mk][v.mes] || 0) + 1;
+        mesPorCalendario[mk][s.mes] = (mesPorCalendario[mk][s.mes] || 0) + 1;
     });
     const mesDominante = {};
     Object.entries(mesPorCalendario).forEach(([mk, counts]) => {
         mesDominante[mk] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
     });
-    noParticipa.forEach(np => {
-        if (np.mes) return;   // si lo llegaran a registrar, se respeta
-        const ts = parseTS(np.marcaStr);
-        if (ts) np.mes = mesDominante[ts.getMonth()] || MONTH_ORDER[ts.getMonth()];
+
+    // 3) Inferir el mes de los "no participa" sin mes (desde la fecha de registro)
+    subs.forEach(s => {
+        if (s.kind === 'no' && !s.mes && s.ts) s.mes = mesDominante[s.ts.getMonth()] || MONTH_ORDER[s.ts.getMonth()];
+    });
+
+    // 4) TIPO por DNI+Mes, combinando AMBAS bolsas: el registro más reciente
+    //    (sea "participo" o "no participo") es ACTUAL; los anteriores, HISTÓRICO.
+    const maxTS = {};
+    subs.forEach(s => {
+        if (!s.ts) return;
+        const key = `${s.dni}||${s.mes}`;
+        if (!maxTS[key] || s.ts > maxTS[key]) maxTS[key] = s.ts;
+    });
+
+    // 5) Construir salidas con el TIPO ya unificado
+    const visitas = [], noParticipa = [];
+    subs.forEach(s => {
+        const key = `${s.dni}||${s.mes}`;
+        const tipo = (s.ts && maxTS[key] && s.ts.getTime() === maxTS[key].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
+        if (s.kind === 'no') {
+            noParticipa.push({ marcaStr: s.marcaStr, mes: s.mes, dni: s.dni, tipo, motivo: s.motivo });
+        } else {
+            s.fechas.forEach(fecha => visitas.push({ marcaStr: s.marcaStr, mes: s.mes, dni: s.dni, exp: s.exp, tipo, fecha }));
+        }
     });
 
     return { visitas, noParticipa };
