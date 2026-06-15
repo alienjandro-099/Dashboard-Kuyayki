@@ -612,6 +612,27 @@ function processF1(raw) {
         if (!fechas.length) return;
         fechas.forEach(fecha => visitas.push({ marcaStr, mes, dni, exp, tipo, fecha }));
     });
+
+    // Para "no participa" no se registró el mes → lo inferimos.
+    // Usamos el mes dominante que usaron las visitas registradas en el mismo
+    // mes calendario (la marca temporal). Ej.: registros de junio → "JUNIO".
+    const mesPorCalendario = {};   // mesCalendario(0-11) -> { MES: conteo }
+    visitas.forEach(v => {
+        const ts = parseTS(v.marcaStr); if (!ts || !v.mes) return;
+        const mk = ts.getMonth();
+        (mesPorCalendario[mk] = mesPorCalendario[mk] || {});
+        mesPorCalendario[mk][v.mes] = (mesPorCalendario[mk][v.mes] || 0) + 1;
+    });
+    const mesDominante = {};
+    Object.entries(mesPorCalendario).forEach(([mk, counts]) => {
+        mesDominante[mk] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+    });
+    noParticipa.forEach(np => {
+        if (np.mes) return;   // si lo llegaran a registrar, se respeta
+        const ts = parseTS(np.marcaStr);
+        if (ts) np.mes = mesDominante[ts.getMonth()] || MONTH_ORDER[ts.getMonth()];
+    });
+
     return { visitas, noParticipa };
 }
 
