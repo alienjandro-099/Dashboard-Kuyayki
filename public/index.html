@@ -375,6 +375,7 @@ const VISITA_COLS = [
 const CUMPLE_COLS = [
     { key:'dni',           label:'DNI' },
     { key:'nombreCompleto',label:'Nombre Completo' },
+    { key:'payaso',        label:'Payasito' },
     { key:'cel',           label:'Celular' },
     { key:'correo',        label:'Correo electrónico' },
     { key:'fechaNac',      label:'Fecha de nacimiento' },
@@ -628,7 +629,7 @@ function buildCumple(lookup) {
         const { months, days } = monthsDaysBetween(t0, nb);
         const edad = calcAge(p._dob, today);
         return {
-            dni: p.dni, nombreCompleto: p.nombreCompleto, cel: p.cel, correo: p.correo,
+            dni: p.dni, nombreCompleto: p.nombreCompleto, payaso: p.payaso, cel: p.cel, correo: p.correo,
             fechaNac: p.fechaNac, edad, edadACumplir: edad + 1,
             diasTxt: faltaTxt(months, days),
             _days: Math.round((nb - t0) / 86400000),
@@ -843,6 +844,7 @@ function renderCumple() {
     tbody.innerHTML = cumpleData.map(row => `<tr>
         <td class="dni-cell">${escHtml(row.dni)}</td>
         <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+        <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
         <td><small>${escHtml(row.cel)||'—'}</small></td>
         <td><small>${escHtml(row.correo)||'—'}</small></td>
         <td>${escHtml(row.fechaNac)||'—'}</td>
