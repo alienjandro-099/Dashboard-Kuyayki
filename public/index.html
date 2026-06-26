@@ -6,6 +6,8 @@
     <title>KUYAYKI CLOWN – Reporte</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <style>
         :root {
             --rojo:    #E01A3C;
@@ -239,6 +241,69 @@
         .chart-empty { color: #bbb; text-align: center; padding: 22px; }
 
         .refresh-footer { text-align: center; font-size: .73rem; color: #bbb; margin-top: 14px; }
+
+        /* ── GESTIÓN: asistencia + comentarios ── */
+        .config-banner {
+            background: #FFF8E1; border: 2px solid var(--amarillo); border-radius: 14px;
+            padding: 14px 18px; margin: 16px 0; font-size: .85rem; color: #7a5b00;
+        }
+        .config-banner b { color: var(--rojo); }
+        .config-banner code { background: #fff; padding: 1px 6px; border-radius: 5px; border: 1px solid #eadfb0; }
+        /* toggle switch */
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background: #ccc; border-radius: 24px; transition: .2s; }
+        .slider::before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+        .switch input:checked + .slider { background: var(--verde); }
+        .switch input:checked + .slider::before { transform: translateX(20px); }
+        .switch input:disabled + .slider { opacity: .45; cursor: not-allowed; }
+        .asistio-no td { background: #FFF1F2 !important; color: #9a9a9a; }
+        .asistio-txt { font-size: .72rem; font-weight: 800; margin-left: 6px; }
+        .asistio-txt.si { color: var(--verde); }
+        .asistio-txt.no { color: var(--rojo); }
+        .btn-coment {
+            border: 2px solid var(--azul); background: #fff; color: var(--azul);
+            border-radius: 9px; padding: 3px 10px; font-size: .76rem; font-weight: 800; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 5px; transition: all .15s;
+        }
+        .btn-coment:hover { background: var(--azul); color: #fff; }
+        .coment-badge { background: var(--rojo); color: #fff; border-radius: 9px; padding: 0 6px; font-size: .68rem; font-weight: 800; }
+        /* modal */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(26,26,46,.55);
+            display: none; align-items: center; justify-content: center; z-index: 8000; padding: 16px;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: #fff; border-radius: 20px; width: 100%; max-width: 560px;
+            max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+            border: 3px solid var(--morado); box-shadow: 0 18px 50px rgba(0,0,0,.35);
+        }
+        .modal-head { background: linear-gradient(120deg, var(--morado), var(--azul)); color: #fff; padding: 14px 18px; }
+        .modal-head h3 { font-size: 1.05rem; font-weight: 800; }
+        .modal-head .sub { font-size: .78rem; opacity: .9; margin-top: 3px; }
+        .modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; line-height: 1; }
+        .modal-body { padding: 16px 18px; overflow-y: auto; }
+        .coment-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+        .coment-item { background: #F5F0FF; border-left: 4px solid var(--morado); border-radius: 10px; padding: 9px 12px; }
+        .coment-item .ci-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+        .coment-item .ci-num { font-weight: 900; color: var(--morado); }
+        .coment-item .ci-meta { font-size: .7rem; color: #999; }
+        .coment-item .ci-text { font-size: .85rem; line-height: 1.4; color: #333; white-space: pre-wrap; }
+        .coment-item .ci-del { background: none; border: none; color: #c0392b; cursor: pointer; font-size: .72rem; font-weight: 700; }
+        .coment-empty { color: #bbb; text-align: center; padding: 14px; font-size: .85rem; }
+        .modal-foot { border-top: 1px solid #eee; padding: 12px 18px; }
+        .modal-foot input, .modal-foot textarea {
+            width: 100%; border: 2px solid #ddd; border-radius: 10px; padding: 8px 10px;
+            font-size: .85rem; font-family: inherit; outline: none; margin-bottom: 8px;
+        }
+        .modal-foot textarea { resize: vertical; min-height: 60px; }
+        .modal-foot input:focus, .modal-foot textarea:focus { border-color: var(--azul); }
+        .btn-add-coment {
+            width: 100%; background: var(--verde); color: #fff; border: none; border-radius: 10px;
+            padding: 9px; font-weight: 800; cursor: pointer; font-size: .88rem;
+        }
+        .btn-add-coment:disabled { opacity: .5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -265,6 +330,7 @@
     <button class="tab"        data-sec="cumple"    onclick="showSection('cumple')">🎂 Cumpleaños</button>
     <button class="tab"        data-sec="payasitos" onclick="showSection('payasitos')">🤡 Información de los Payasitos</button>
     <button class="tab"        data-sec="stats"     onclick="showSection('stats')">📈 Estadísticas</button>
+    <button class="tab"        data-sec="gestion"   onclick="showSection('gestion')">🗒️ Asistencia y Comentarios</button>
 </nav>
 
 <div class="main">
@@ -385,7 +451,52 @@
         </div>
     </section>
 
+    <!-- ══════════ SECCIÓN GESTIÓN (Asistencia + Comentarios) ══════════ -->
+    <section id="sec-gestion" hidden>
+        <div class="config-banner" id="configBanner" style="display:none">
+            ⚙️ <b>Supabase no está configurado.</b> Puedes ver los registros, pero para
+            <b>guardar</b> asistencia y comentarios edita <code>config.js</code> con tu
+            <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> (ver <code>supabase_setup.sql</code>).
+        </div>
+        <div class="filters-panel" id="panel-gestion" style="display:none">
+            <div class="filters-title">🎨 Segmentación – Asistencia y Comentarios</div>
+            <div class="filters-grid" id="grid-gestion"></div>
+            <div class="filters-bar">
+                <button class="btn-clear-all" onclick="fpClearAll('gestion')">✕ Limpiar todos</button>
+                <span class="results-info">Mostrando <strong id="gestion-shown">0</strong> de <strong id="gestion-total">0</strong> participaciones</span>
+            </div>
+        </div>
+        <div class="table-card" id="card-gestion" style="display:none">
+            <div class="table-topbar">
+                <span class="table-topbar-title">🗒️ Asistencia y Comentarios</span>
+                <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+            </div>
+            <div class="table-scroll">
+                <table><thead><tr id="head-gestion"></tr></thead><tbody id="body-gestion"></tbody></table>
+            </div>
+        </div>
+    </section>
+
     <div class="refresh-footer" id="refreshFooter"></div>
+</div>
+
+<!-- MODAL DE COMENTARIOS -->
+<div class="modal-overlay" id="comentModal" onclick="if(event.target===this)cerrarComentarios()">
+    <div class="modal">
+        <div class="modal-head" style="position:relative">
+            <button class="modal-close" onclick="cerrarComentarios()">×</button>
+            <h3>💬 Comentarios</h3>
+            <div class="sub" id="modalSub">—</div>
+        </div>
+        <div class="modal-body">
+            <ul class="coment-list" id="comentList"></ul>
+        </div>
+        <div class="modal-foot">
+            <input type="text" id="comentAutor" placeholder="Tu nombre (opcional)" maxlength="60">
+            <textarea id="comentTexto" placeholder="Escribe un comentario…" maxlength="800"></textarea>
+            <button class="btn-add-coment" id="btnAddComent" onclick="addComentario()">➕ Agregar comentario</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -455,9 +566,30 @@ const NOPART_COLS = [
     { key:'motivo',        label:'Motivo de inasistencia' },
 ];
 
+const GESTION_COLS = [
+    { key:'fechaRegistro', label:'Fecha de Registro' },
+    { key:'dni',           label:'DNI' },
+    { key:'nombreCompleto',label:'Nombre Completo' },
+    { key:'payaso',        label:'Payasito' },
+    { key:'mes',           label:'Mes' },
+    { key:'fechasAsistir', label:'Fechas Asistir' },
+    { key:'asistioTxt',    label:'¿Asistió?' },
+    { key:'comentarios',   label:'Comentarios' },
+];
+
 // ═══════════════════════════════════════════ STATE
-let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [];
+let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [], gestionData = [];
 let nextRefresh = null;
+
+// ── Supabase / overrides
+let sb = null;                       // cliente Supabase (o null si no configurado)
+const noAsistioSet = new Set();      // record_keys marcados como NO asistió
+const comentariosByKey = {};         // record_key -> [ {id, comentario, autor, created_at} ]
+let modalKey = null;                 // record_key del modal abierto
+
+function recordKey(row) { return `${row.dni}||${row.mes}||${row.fechasAsistir}`; }
+function estaAsistido(row) { return !noAsistioSet.has(recordKey(row)); }
+function supabaseOK() { return !!sb; }
 const PANELS = {};
 
 // ═══════════════════════════════════════════ UTILITIES
@@ -731,6 +863,26 @@ function buildNoParticipa(rows, lookup) {
         };
     });
 }
+// Una fila por participación ACTUAL (dni+mes+fecha único) para gestionar
+// asistencia y comentarios.
+function buildGestion(visitas) {
+    const seen = new Set();
+    const out = [];
+    visitas.forEach(r => {
+        if (r.tipoRegistro2 !== 'ACTUAL') return;
+        const key = recordKey(r);
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({
+            _key: key,
+            fechaRegistro: r.fechaRegistro, dni: r.dni,
+            nombreCompleto: r.nombreCompleto, payaso: r.payaso, genero: r.genero,
+            mes: r.mes, fechasAsistir: r.fechasAsistir, tipoRegistro2: r.tipoRegistro2,
+            asistioTxt: noAsistioSet.has(key) ? 'No' : 'Sí',
+        });
+    });
+    return out;
+}
 function buildCumple(lookup) {
     const today = new Date();
     return Object.values(lookup).filter(p => p._dob).map(p => {
@@ -900,9 +1052,9 @@ function setHeaders(trId, cols) {
     document.getElementById(trId).innerHTML = cols.map(c => `<th>${escHtml(c.label)}</th>`).join('');
 }
 function renderVisita(P) {
-    const data = fpFiltered(P);
+    const data = fpFiltered(P).filter(estaAsistido);   // excluir los marcados como NO asistió
     document.getElementById('visita-shown').textContent = data.length;
-    document.getElementById('visita-total').textContent = P.allRows.length;
+    document.getElementById('visita-total').textContent = P.allRows.filter(estaAsistido).length;
     const tbody = document.getElementById('body-visita');
     if (!data.length) { tbody.innerHTML = noRows(VISITA_COLS.length); return; }
     tbody.innerHTML = data.map(row => {
@@ -941,6 +1093,127 @@ function renderNoParticipa(P) {
         <td class="motivo-cell">${row.motivo?escHtml(row.motivo):'<em style="color:#ccc">Sin especificar</em>'}</td>
     </tr>`).join('');
 }
+function renderGestion(P) {
+    const data = fpFiltered(P);
+    document.getElementById('gestion-shown').textContent = data.length;
+    document.getElementById('gestion-total').textContent = P.allRows.length;
+    const tbody = document.getElementById('body-gestion');
+    if (!data.length) { tbody.innerHTML = noRows(GESTION_COLS.length); return; }
+    const dis = supabaseOK() ? '' : 'disabled';
+    tbody.innerHTML = data.map(row => {
+        const k = row._key;
+        const asistio = !noAsistioSet.has(k);
+        const n = (comentariosByKey[k] || []).length;
+        return `<tr class="${asistio ? '' : 'asistio-no'}">
+            <td class="fecha-reg">${escHtml(row.fechaRegistro)}</td>
+            <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
+            <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+            <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+            <td><span class="badge b-mes">${escHtml(row.mes)}</span></td>
+            <td class="fecha-asistir">${escHtml(row.fechasAsistir)}</td>
+            <td style="white-space:nowrap">
+                <label class="switch"><input type="checkbox" ${asistio?'checked':''} ${dis}
+                    onchange="toggleAsistencia('${escHtml(k)}', this.checked)"><span class="slider"></span></label>
+                <span class="asistio-txt ${asistio?'si':'no'}">${asistio?'Sí':'No'}</span>
+            </td>
+            <td>
+                <button class="btn-coment" onclick="abrirComentarios('${escHtml(k)}')">💬 Ver / Agregar
+                    ${n ? `<span class="coment-badge">${n}</span>` : ''}</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ── Asistencia (toggle → Supabase)
+async function toggleAsistencia(key, checked) {
+    if (!supabaseOK()) { alert('Configura Supabase para guardar la asistencia (ver config.js).'); renderGestion(PANELS.gestion); return; }
+    if (checked) noAsistioSet.delete(key); else noAsistioSet.add(key);
+    // Actualiza vistas dependientes al instante
+    const g = gestionData.find(r => r._key === key);
+    if (g) g.asistioTxt = checked ? 'Sí' : 'No';
+    fpRender('gestion'); renderGestion(PANELS.gestion);
+    if (PANELS.visita) renderVisita(PANELS.visita);
+    if (PANELS.estadisticas) renderEstadisticas(PANELS.estadisticas);
+    // Persistir
+    const [dni, mes, fecha] = key.split('||');
+    const { error } = await sb.from('asistencia')
+        .upsert({ record_key: key, dni, mes, fecha, asistio: checked, updated_at: new Date().toISOString() }, { onConflict: 'record_key' });
+    if (error) { alert('No se pudo guardar la asistencia: ' + error.message); }
+}
+
+// ── Comentarios (modal)
+function abrirComentarios(key) {
+    modalKey = key;
+    const g = gestionData.find(r => r._key === key) || {};
+    document.getElementById('modalSub').textContent =
+        `${g.nombreCompleto || ''}${g.payaso ? ' · ' + g.payaso : ''} — ${g.mes || ''} · ${g.fechasAsistir || ''}`;
+    document.getElementById('comentTexto').value = '';
+    renderComentLista();
+    const btn = document.getElementById('btnAddComent');
+    btn.disabled = !supabaseOK();
+    btn.textContent = supabaseOK() ? '➕ Agregar comentario' : 'Configura Supabase para comentar';
+    document.getElementById('comentModal').classList.add('open');
+}
+function cerrarComentarios() { document.getElementById('comentModal').classList.remove('open'); modalKey = null; }
+function renderComentLista() {
+    const list = comentariosByKey[modalKey] || [];
+    const ul = document.getElementById('comentList');
+    if (!list.length) { ul.innerHTML = '<div class="coment-empty">Aún no hay comentarios. ¡Sé el primero! 🤡</div>'; return; }
+    ul.innerHTML = list.map((c, i) => {
+        const fecha = c.created_at ? new Date(c.created_at).toLocaleString('es-PE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+        return `<li class="coment-item">
+            <div class="ci-top">
+                <span class="ci-num">#${i+1}${c.autor ? ' · ' + escHtml(c.autor) : ''}</span>
+                <span class="ci-meta">${escHtml(fecha)} ${supabaseOK() && c.id ? `<button class="ci-del" onclick="borrarComentario(${c.id})">eliminar</button>` : ''}</span>
+            </div>
+            <div class="ci-text">${escHtml(c.comentario)}</div>
+        </li>`;
+    }).join('');
+}
+async function addComentario() {
+    if (!supabaseOK() || !modalKey) return;
+    const texto = document.getElementById('comentTexto').value.trim();
+    const autor = document.getElementById('comentAutor').value.trim();
+    if (!texto) { document.getElementById('comentTexto').focus(); return; }
+    const [dni] = modalKey.split('||');
+    const { data, error } = await sb.from('comentarios')
+        .insert({ record_key: modalKey, dni, comentario: texto, autor: autor || null })
+        .select().single();
+    if (error) { alert('No se pudo guardar el comentario: ' + error.message); return; }
+    (comentariosByKey[modalKey] = comentariosByKey[modalKey] || []).push(data);
+    document.getElementById('comentTexto').value = '';
+    renderComentLista();
+    renderGestion(PANELS.gestion);   // actualizar contador
+}
+async function borrarComentario(id) {
+    if (!supabaseOK() || !modalKey) return;
+    if (!confirm('¿Eliminar este comentario?')) return;
+    const { error } = await sb.from('comentarios').delete().eq('id', id);
+    if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+    comentariosByKey[modalKey] = (comentariosByKey[modalKey] || []).filter(c => c.id !== id);
+    renderComentLista();
+    renderGestion(PANELS.gestion);
+}
+
+// ── Carga inicial desde Supabase
+async function initSupabase() {
+    const cfg = window.KUYAYKI_CONFIG || {};
+    if (sb || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || !window.supabase) return;
+    try { sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY); }
+    catch (e) { console.error('Supabase init', e); sb = null; }
+}
+async function cargarSupabase() {
+    noAsistioSet.clear();
+    for (const k in comentariosByKey) delete comentariosByKey[k];
+    if (!supabaseOK()) return;
+    try {
+        const { data: asis } = await sb.from('asistencia').select('record_key,asistio').eq('asistio', false);
+        (asis || []).forEach(r => noAsistioSet.add(r.record_key));
+        const { data: coms } = await sb.from('comentarios').select('*').order('created_at', { ascending: true });
+        (coms || []).forEach(c => { (comentariosByKey[c.record_key] = comentariosByKey[c.record_key] || []).push(c); });
+    } catch (e) { console.error('Supabase carga', e); }
+}
+
 function renderPayasitos(P) {
     const data = fpFiltered(P);
     document.getElementById('payasitos-shown').textContent = data.length;
@@ -1053,7 +1326,7 @@ function barChart(elId, rows, grad) {
     }).join('');
 }
 function renderEstadisticas(P) {
-    const data = fpFiltered(P);
+    const data = fpFiltered(P).filter(estaAsistido);   // excluir los marcados como NO asistió
     document.getElementById('stats-count').textContent = data.length;
     document.getElementById('card-estadisticas').style.display = 'block';
 
@@ -1116,7 +1389,7 @@ function goToPayasito(dni) {
 function exportVisitaExcel() {
     const P = PANELS.visita;
     if (!P) return;
-    const data = fpFiltered(P);
+    const data = fpFiltered(P).filter(estaAsistido);
     if (!data.length) { alert('No hay registros para exportar con los filtros actuales.'); return; }
 
     // Agrupar por Fechas Asistir
@@ -1145,7 +1418,7 @@ function exportVisitaExcel() {
 
 // ═══════════════════════════════════════════ TABS
 function showSection(name) {
-    ['visita','cumple','payasitos','stats'].forEach(s => {
+    ['visita','cumple','payasitos','stats','gestion'].forEach(s => {
         document.getElementById('sec-'+s).hidden = (s !== name);
     });
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.sec === name));
@@ -1167,7 +1440,9 @@ async function loadData() {
     overlay.classList.remove('hidden');
     errorBox.style.display = 'none';
     try {
+        await initSupabase();
         const [rawF1, rawF2] = await Promise.all([fetchCSV(URL_F1), fetchCSV(URL_F2)]);
+        await cargarSupabase();   // asistencia + comentarios guardados
         const f2 = processF2(rawF2);
         const f1 = processF1(rawF1);
 
@@ -1175,6 +1450,8 @@ async function loadData() {
         noParticipaData = buildNoParticipa(f1.noParticipa, f2.lookup);
         payasitosData  = f2.rows;
         cumpleData     = buildCumple(f2.lookup);
+        gestionData    = buildGestion(visitaData);
+        document.getElementById('configBanner').style.display = supabaseOK() ? 'none' : 'block';
 
         // Default MES (visita) = último mes cronológico con registros ACTUAL
         const mesesActual = [...new Set(visitaData.filter(r => r.tipoRegistro2 === 'ACTUAL' && r.mes).map(r => r.mes))];
@@ -1236,6 +1513,21 @@ async function loadData() {
                 { key:'fechasAsistir', label:'FECHA / EVENTO' },
             ],
             allRows: visitaData, defaults: { tipoRegistro2: ['ACTUAL'] }, monthKey:'mes', onChange: renderEstadisticas,
+        });
+        setHeaders('head-gestion', GESTION_COLS);
+        const gestionDefaults = {};
+        if (lastMes) gestionDefaults.mes = [lastMes];
+        makeFilterPanel({
+            id:'gestion', gridId:'grid-gestion', panelId:'panel-gestion', cardId:'card-gestion',
+            defs:[
+                { key:'dni',           label:'DNI' },
+                { key:'nombreCompleto',label:'NOMBRE' },
+                { key:'payaso',        label:'PAYASITO' },
+                { key:'mes',           label:'MES' },
+                { key:'fechasAsistir', label:'FECHA / EVENTO' },
+                { key:'asistioTxt',    label:'¿ASISTIÓ?' },
+            ],
+            allRows: gestionData, defaults: gestionDefaults, monthKey:'mes', onChange: renderGestion,
         });
         renderCumple();
 
