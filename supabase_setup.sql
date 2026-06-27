@@ -7,11 +7,18 @@
 --    Solo se guarda fila cuando alguien cambia el valor.
 --    asistio = true  → asistió (valor por defecto en la app)
 --    asistio = false → NO asistió (se excluye de estadísticas y tabla)
+--
+--    record_key = CLAVE ESTABLE = "<marca temporal del envío>||<fecha del evento EN CRUDO>".
+--    No usa el DNI ni la fecha "limpia": así, si se corrige un DNI en el
+--    formulario o si la app cambia sus reglas de limpieza, el comentario/
+--    asistencia NO se pierde (sigue apuntando al mismo envío).
+--    Las columnas dni/mes/fecha son solo una FOTO legible del momento en que
+--    se guardó (para auditoría); la identidad real es record_key.
 create table if not exists public.asistencia (
-    record_key  text primary key,         -- clave natural: dni||mes||fecha
-    dni         text,
-    mes         text,
-    fecha       text,                      -- "Fechas Asistir" (evento)
+    record_key  text primary key,         -- "marca temporal||fecha cruda" (estable)
+    dni         text,                      -- snapshot legible
+    mes         text,                      -- snapshot legible
+    fecha       text,                      -- snapshot legible (evento, ya limpio)
     asistio     boolean not null default true,
     updated_at  timestamptz not null default now()
 );
@@ -19,10 +26,10 @@ create table if not exists public.asistencia (
 -- 2) Tabla de COMENTARIOS (varios por participación).
 create table if not exists public.comentarios (
     id          bigint generated always as identity primary key,
-    record_key  text not null,             -- mismo dni||mes||fecha
-    dni         text,
+    record_key  text not null,             -- misma clave estable que en asistencia
+    dni         text,                       -- snapshot legible
     comentario  text not null,
-    autor       text,                      -- opcional, quién comentó
+    autor       text,                       -- opcional, quién comentó
     created_at  timestamptz not null default now()
 );
 

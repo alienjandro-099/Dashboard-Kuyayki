@@ -587,7 +587,14 @@ const noAsistioSet = new Set();      // record_keys marcados como NO asistió
 const comentariosByKey = {};         // record_key -> [ {id, comentario, autor, created_at} ]
 let modalKey = null;                 // record_key del modal abierto
 
-function recordKey(row) { return `${row.dni}||${row.mes}||${row.fechasAsistir}`; }
+// Clave ESTABLE de cada participación: marca temporal del envío + fecha del
+// evento EN CRUDO (sin nuestros reemplazos). No depende del DNI ni de las
+// reglas de limpieza, así que sobrevive a correcciones del formulario y a
+// cambios en la lógica de la página.
+function recordKey(row) {
+    if (row._key) return row._key;
+    return `${row._ts || ''}||${row.fechaRaw != null ? row.fechaRaw : row.fechasAsistir}`;
+}
 function estaAsistido(row) { return !noAsistioSet.has(recordKey(row)); }
 function supabaseOK() { return !!sb; }
 const PANELS = {};
@@ -721,7 +728,9 @@ function processF1(raw) {
             subs.push({ kind:'no', dni, marcaStr, ts, mes, motivo: get(row, iMotivo) });
         } else {
             const fechasRaw = fechaIdxs.map(x=>get(row,x.i)).filter(Boolean).join(', ');
-            const fechas = fechasRaw.split(',').map(f => { const c=f.trim(); return FECHA_REPLACEMENTS[c]||c; }).filter(Boolean);
+            // Guardamos la fecha CRUDA y la LIMPIA: la cruda ancla la clave estable.
+            const fechas = fechasRaw.split(',').map(f => f.trim()).filter(Boolean)
+                .map(raw => ({ raw, clean: FECHA_REPLACEMENTS[raw] || raw }));
             if (!fechas.length) return;
             subs.push({ kind:'visita', dni, marcaStr, ts, mes, exp: get(row,iExp), fechas });
         }
@@ -762,7 +771,7 @@ function processF1(raw) {
         if (s.kind === 'no') {
             noParticipa.push({ marcaStr: s.marcaStr, mes: s.mes, dni: s.dni, tipo, motivo: s.motivo });
         } else {
-            s.fechas.forEach(fecha => visitas.push({ marcaStr: s.marcaStr, mes: s.mes, dni: s.dni, exp: s.exp, tipo, fecha }));
+            s.fechas.forEach(p => visitas.push({ marcaStr: s.marcaStr, mes: s.mes, dni: s.dni, exp: s.exp, tipo, fecha: p.clean, fechaRaw: p.raw }));
         }
     });
 
@@ -841,6 +850,8 @@ function buildVisita(f1, lookup) {
         const p = lookup[r.dni] || {};
         return {
             fechaRegistro: fmtFechaHora(parseTS(r.marcaStr)), _ts: r.marcaStr,
+            _key: `${r.marcaStr}||${r.fechaRaw}`,   // clave estable (marca + fecha cruda)
+            fechaRaw: r.fechaRaw,
             dni: r.dni,
             nombreCompleto: p.nombreCompleto || '',
             payaso: p.payaso || '', genero: p.genero || '',
@@ -1134,10 +1145,10 @@ async function toggleAsistencia(key, checked) {
     fpRender('gestion'); renderGestion(PANELS.gestion);
     if (PANELS.visita) renderVisita(PANELS.visita);
     if (PANELS.estadisticas) renderEstadisticas(PANELS.estadisticas);
-    // Persistir
-    const [dni, mes, fecha] = key.split('||');
+    // Persistir (snapshot legible dni/mes/fecha desde el registro)
+    const r = gestionData.find(x => x._key === key) || {};
     const { error } = await sb.from('asistencia')
-        .upsert({ record_key: key, dni, mes, fecha, asistio: checked, updated_at: new Date().toISOString() }, { onConflict: 'record_key' });
+        .upsert({ record_key: key, dni: r.dni || null, mes: r.mes || null, fecha: r.fechasAsistir || null, asistio: checked, updated_at: new Date().toISOString() }, { onConflict: 'record_key' });
     if (error) { alert('No se pudo guardar la asistencia: ' + error.message); }
 }
 
@@ -1175,9 +1186,9 @@ async function addComentario() {
     const texto = document.getElementById('comentTexto').value.trim();
     const autor = document.getElementById('comentAutor').value.trim();
     if (!texto) { document.getElementById('comentTexto').focus(); return; }
-    const [dni] = modalKey.split('||');
+    const r = gestionData.find(x => x._key === modalKey) || {};
     const { data, error } = await sb.from('comentarios')
-        .insert({ record_key: modalKey, dni, comentario: texto, autor: autor || null })
+        .insert({ record_key: modalKey, dni: r.dni || null, comentario: texto, autor: autor || null })
         .select().single();
     if (error) { alert('No se pudo guardar el comentario: ' + error.message); return; }
     (comentariosByKey[modalKey] = comentariosByKey[modalKey] || []).push(data);
