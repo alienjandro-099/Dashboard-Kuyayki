@@ -665,8 +665,9 @@ function cleanPhone(raw) {
     return raw.trim();
 }
 function only9(raw) { const d = (raw||'').replace(/[^0-9]/g, ''); return d.slice(-9); }
-// Corrige error humano: "O" (letra) al inicio del DNI → "0" (cero). Ej: O7402152 → 07402152
-function normDNI(s) { return (s||'').trim().replace(/^[Oo]+/, m => '0'.repeat(m.length)); }
+// Corrige error humano: cualquier "O" (letra) en el DNI → "0" (cero).
+// El DNI es numérico, así que toda O es un cero mal escrito. Ej: O74O2152 → 07402152
+function normDNI(s) { return (s||'').trim().replace(/[Oo]/g, '0'); }
 
 // ── Cumpleaños helpers
 function calcAge(dob, today) {
