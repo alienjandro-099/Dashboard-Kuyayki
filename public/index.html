@@ -304,6 +304,30 @@
             padding: 9px; font-weight: 800; cursor: pointer; font-size: .88rem;
         }
         .btn-add-coment:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* Vincular / editar DNI */
+        .dni-noreg td { background: #FFF7ED !important; }
+        .btn-vincular {
+            border: 2px dashed var(--naranja); background: #fff; color: var(--naranja);
+            border-radius: 9px; padding: 3px 10px; font-size: .74rem; font-weight: 800; cursor: pointer; transition: all .15s;
+        }
+        .btn-vincular:hover { background: var(--naranja); color: #fff; }
+        .dni-edit {
+            border: none; background: none; cursor: pointer; font-size: .82rem; margin-left: 5px; opacity: .55; transition: opacity .15s;
+        }
+        .dni-edit:hover { opacity: 1; }
+        .vinc-search {
+            width: 100%; border: 2px solid #ddd; border-radius: 10px; padding: 8px 10px;
+            font-size: .85rem; outline: none; margin-bottom: 10px;
+        }
+        .vinc-search:focus { border-color: var(--azul); }
+        .vinc-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .vinc-item {
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            padding: 9px 12px; border: 2px solid #eee; border-radius: 10px; cursor: pointer; transition: all .12s; font-size: .85rem;
+        }
+        .vinc-item:hover { border-color: var(--azul); background: #EFF6FF; }
+        .vinc-dni { font-family: monospace; font-size: .8rem; color: #666; flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -499,6 +523,39 @@
     </div>
 </div>
 
+<!-- MODAL VINCULAR DNI -->
+<div class="modal-overlay" id="vincularModal" onclick="if(event.target===this)cerrarVincular()">
+    <div class="modal">
+        <div class="modal-head" style="position:relative">
+            <button class="modal-close" onclick="cerrarVincular()">×</button>
+            <h3>🔗 Vincular DNI no registrado</h3>
+            <div class="sub" id="vincSub">—</div>
+        </div>
+        <div class="modal-body">
+            <input class="vinc-search" id="vincSearch" type="text" placeholder="Buscar payasito por nombre, apodo o DNI…" oninput="renderVincLista(this.value)">
+            <ul class="vinc-list" id="vincList"></ul>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL EDITAR DNI -->
+<div class="modal-overlay" id="editDniModal" onclick="if(event.target===this)cerrarEditDni()">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-head" style="position:relative">
+            <button class="modal-close" onclick="cerrarEditDni()">×</button>
+            <h3>✏️ Editar DNI del payasito</h3>
+            <div class="sub">DNI actual: <b id="editDniActual">—</b></div>
+        </div>
+        <div class="modal-foot" style="border-top:none">
+            <label style="font-size:.78rem;font-weight:700;color:var(--azul)">Nuevo DNI</label>
+            <input type="text" id="editDniNuevo" inputmode="numeric" maxlength="15" placeholder="Nuevo DNI"
+                   onkeydown="if(event.key==='Enter')guardarEditarDni()">
+            <button class="btn-add-coment" onclick="guardarEditarDni()">💾 Guardar cambio</button>
+            <p style="font-size:.72rem;color:#999;margin-top:8px">Se reemplazará este DNI en todas las vistas y se recordará. Las visitas con el DNI corregido se enlazarán a este payasito.</p>
+        </div>
+    </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════ CONFIG
 const URL_F1 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcKt0v5H11947fOc1zdhujgFzIPTIbiUriiE2Bp-4rN517iFcvT87u0PB6592WFZZnx9yQxt9DJOQe/pub?gid=1820549015&single=true&output=csv';
@@ -580,12 +637,25 @@ const GESTION_COLS = [
 // ═══════════════════════════════════════════ STATE
 let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [], gestionData = [];
 let nextRefresh = null;
+let lastRawF1 = null, lastRawF2 = null;   // CSV crudos cacheados (para reconstruir sin re-descargar)
+let f2Lookup = {};                        // dni(canon) -> payasito ACTUAL
 
 // ── Supabase / overrides
 let sb = null;                       // cliente Supabase (o null si no configurado)
 const noAsistioSet = new Set();      // record_keys marcados como NO asistió
 const comentariosByKey = {};         // record_key -> [ {id, comentario, autor, created_at} ]
+const dniAliasMap = {};              // dni_origen -> dni_destino (correcciones/vínculos)
 let modalKey = null;                 // record_key del modal abierto
+let vincularFrom = null, editDniFrom = null;
+
+// Resuelve un DNI aplicando los alias guardados (con encadenamiento y anti-ciclo).
+function resolveDni(dni) {
+    let d = dni; const seen = new Set();
+    while (dniAliasMap[d] && !seen.has(d)) { seen.add(d); d = dniAliasMap[d]; }
+    return d;
+}
+// DNI canónico = normaliza O→0 y luego aplica alias.
+function canonDni(raw) { return resolveDni(normDNI(raw)); }
 
 // Clave ESTABLE de cada participación: marca temporal del envío + fecha del
 // evento EN CRUDO (sin nuestros reemplazos). No depende del DNI ni de las
@@ -721,7 +791,7 @@ function processF1(raw) {
     // 1) Recolectar todos los registros (participación y "no participa")
     const subs = [];
     rows.forEach(row => {
-        const dni = normDNI(get(row,iDNI)); if (!dni) return;
+        const dni = canonDni(get(row,iDNI)); if (!dni) return;
         const marcaStr = get(row,iMarca);
         const ts = parseTS(marcaStr);
         const mes = get(row,iMes).toUpperCase();
@@ -805,14 +875,14 @@ function processF2(raw) {
 
     const maxTS = {};
     rows.forEach(row => {
-        const dni = normDNI(get(row,I.dni)); if (!dni) return;
+        const dni = canonDni(get(row,I.dni)); if (!dni) return;
         const ts = parseTSf2(get(row,I.marca)); if (!ts) return;
         if (!maxTS[dni] || ts > maxTS[dni]) maxTS[dni] = ts;
     });
 
     const built = [];
     rows.forEach(row => {
-        const dni = normDNI(get(row,I.dni)); if (!dni) return;
+        const dni = canonDni(get(row,I.dni)); if (!dni) return;
         const ts = parseTSf2(get(row,I.marca));
         const tipo = (ts && maxTS[dni] && ts.getTime() === maxTS[dni].getTime()) ? 'ACTUAL' : 'HISTÓRICO';
         const nombreCompleto = [get(row,I.nombres), get(row,I.apPat), get(row,I.apMat)]
@@ -1071,10 +1141,13 @@ function renderVisita(P) {
     if (!data.length) { tbody.innerHTML = noRows(VISITA_COLS.length); return; }
     tbody.innerHTML = data.map(row => {
         const e = norm(row.experiencia); const eB = e.startsWith('s') ? 'b-si' : (e.startsWith('n') ? 'b-no' : '');
-        return `<tr>
+        const noReg = !row.nombreCompleto;   // DNI no encontrado en Payasitos
+        return `<tr${noReg ? ' class="dni-noreg"' : ''}>
             <td class="fecha-reg">${escHtml(row.fechaRegistro)}</td>
             <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
-            <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+            <td class="nombre-cell">${noReg
+                ? `<button class="btn-vincular" title="Vincular este DNI a un payasito registrado" onclick="abrirVincular('${escHtml(row.dni)}')">🔗 Vincular DNI</button>`
+                : escHtml(row.nombreCompleto)}</td>
             <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
             <td>${escHtml(row.genero)||'—'}</td>
             <td><small>${escHtml(row.correo)||'—'}</small></td>
@@ -1217,13 +1290,103 @@ async function initSupabase() {
 async function cargarSupabase() {
     noAsistioSet.clear();
     for (const k in comentariosByKey) delete comentariosByKey[k];
+    for (const k in dniAliasMap) delete dniAliasMap[k];
     if (!supabaseOK()) return;
     try {
         const { data: asis } = await sb.from('asistencia').select('record_key,asistio').eq('asistio', false);
         (asis || []).forEach(r => noAsistioSet.add(r.record_key));
         const { data: coms } = await sb.from('comentarios').select('*').order('created_at', { ascending: true });
         (coms || []).forEach(c => { (comentariosByKey[c.record_key] = comentariosByKey[c.record_key] || []).push(c); });
+        const { data: al } = await sb.from('dni_alias').select('from_dni,to_dni');
+        (al || []).forEach(a => { dniAliasMap[a.from_dni] = a.to_dni; });
     } catch (e) { console.error('Supabase carga', e); }
+}
+
+// Guarda un alias de DNI (de → a) y reconstruye las vistas.
+async function guardarAlias(from, to, motivo) {
+    from = normDNI(from); to = normDNI(to);
+    if (!from || !to) return false;
+    if (from === to) { alert('El DNI de origen y destino son iguales.'); return false; }
+    if (!supabaseOK()) { alert('Configura Supabase para guardar el cambio (ver config.js).'); return false; }
+    const { error } = await sb.from('dni_alias')
+        .upsert({ from_dni: from, to_dni: to, motivo: motivo || null, updated_at: new Date().toISOString() }, { onConflict: 'from_dni' });
+    if (error) { alert('No se pudo guardar: ' + error.message); return false; }
+    dniAliasMap[from] = to;
+    rebuildData();
+    return true;
+}
+
+// Reconstruye datasets desde el CSV cacheado con el estado actual (alias/asistencia)
+// sin re-descargar ni recrear paneles (conserva los filtros activos).
+function rebuildData() {
+    if (!lastRawF1 || !lastRawF2) return;
+    const f2 = processF2(lastRawF2);
+    const f1 = processF1(lastRawF1);
+    f2Lookup       = f2.lookup;
+    visitaData     = buildVisita(f1.visitas, f2Lookup);
+    noParticipaData = buildNoParticipa(f1.noParticipa, f2Lookup);
+    payasitosData  = f2.rows;
+    cumpleData     = buildCumple(f2Lookup);
+    gestionData    = buildGestion(visitaData);
+    const upd = (id, rows, render) => { if (PANELS[id]) { PANELS[id].allRows = rows; fpRender(id); render(PANELS[id]); } };
+    upd('visita', visitaData, renderVisita);
+    upd('noparticipa', noParticipaData, renderNoParticipa);
+    upd('payasitos', payasitosData, renderPayasitos);
+    upd('estadisticas', visitaData, renderEstadisticas);
+    upd('gestion', gestionData, renderGestion);
+    renderCumple();
+    const np = document.getElementById('np-count');
+    if (np) np.textContent = noParticipaData.filter(r => r.tipoRegistro2 === 'ACTUAL').length;
+}
+
+// ── Feature: VINCULAR un DNI no registrado a un payasito
+function abrirVincular(dni) {
+    if (!supabaseOK()) { alert('Configura Supabase para vincular DNIs (ver config.js).'); return; }
+    vincularFrom = dni;
+    document.getElementById('vincSub').textContent = `DNI del formulario: ${dni} — elige el payasito correcto`;
+    document.getElementById('vincSearch').value = '';
+    renderVincLista('');
+    document.getElementById('vincularModal').classList.add('open');
+    setTimeout(() => document.getElementById('vincSearch').focus(), 50);
+}
+function cerrarVincular() { document.getElementById('vincularModal').classList.remove('open'); vincularFrom = null; }
+function renderVincLista(q) {
+    const lq = norm(q);
+    const items = Object.values(f2Lookup)
+        .filter(p => !lq || norm(p.nombreCompleto).includes(lq) || (p.payaso && norm(p.payaso).includes(lq)) || (p.dni || '').includes(q.trim()))
+        .sort((a, b) => String(a.nombreCompleto).localeCompare(String(b.nombreCompleto), 'es'))
+        .slice(0, 60);
+    const ul = document.getElementById('vincList');
+    if (!items.length) { ul.innerHTML = '<div class="coment-empty">Sin coincidencias</div>'; return; }
+    ul.innerHTML = items.map(p => `<li class="vinc-item" onclick="confirmarVinculo('${escHtml(p.dni)}')">
+        <span><b>${escHtml(p.nombreCompleto)}</b>${p.payaso ? ' · <span style="color:var(--naranja)">' + escHtml(p.payaso) + '</span>' : ''}</span>
+        <span class="vinc-dni">${escHtml(p.dni)}</span>
+    </li>`).join('');
+}
+async function confirmarVinculo(toDni) {
+    if (!vincularFrom) return;
+    if (!confirm(`¿Vincular el DNI ${vincularFrom} → ${toDni}?\nTodas las visitas con ${vincularFrom} pasarán a este payasito.`)) return;
+    const from = vincularFrom;
+    if (await guardarAlias(from, toDni, 'vinculo visita')) cerrarVincular();
+}
+
+// ── Feature: EDITAR el DNI de un payasito
+function abrirEditarDni(dni) {
+    if (!supabaseOK()) { alert('Configura Supabase para editar el DNI (ver config.js).'); return; }
+    editDniFrom = dni;
+    document.getElementById('editDniActual').textContent = dni;
+    document.getElementById('editDniNuevo').value = dni;
+    document.getElementById('editDniModal').classList.add('open');
+    setTimeout(() => { const i = document.getElementById('editDniNuevo'); i.focus(); i.select(); }, 50);
+}
+function cerrarEditDni() { document.getElementById('editDniModal').classList.remove('open'); editDniFrom = null; }
+async function guardarEditarDni() {
+    if (!editDniFrom) return;
+    const nuevo = normDNI(document.getElementById('editDniNuevo').value);
+    if (!nuevo) { alert('Ingresa un DNI válido.'); return; }
+    if (nuevo === editDniFrom) { cerrarEditDni(); return; }
+    const from = editDniFrom;
+    if (await guardarAlias(from, nuevo, 'edicion payasito')) cerrarEditDni();
 }
 
 function renderPayasitos(P) {
@@ -1236,7 +1399,7 @@ function renderPayasitos(P) {
         const ep = norm(row.expPrevia); const epB = ep.startsWith('s') ? 'b-si' : (ep.startsWith('n') ? 'b-no' : '');
         return `<tr>
             <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
-            <td class="dni-cell">${escHtml(row.dni)}</td>
+            <td class="dni-cell">${escHtml(row.dni)}<button class="dni-edit" title="Editar DNI" onclick="abrirEditarDni('${escHtml(row.dni)}')">✏️</button></td>
             <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
             <td><small>${escHtml(row.telefono)||'—'}</small></td>
             <td><small>${escHtml(row.correo)||'—'}</small></td>
@@ -1454,14 +1617,16 @@ async function loadData() {
     try {
         await initSupabase();
         const [rawF1, rawF2] = await Promise.all([fetchCSV(URL_F1), fetchCSV(URL_F2)]);
-        await cargarSupabase();   // asistencia + comentarios guardados
+        await cargarSupabase();   // asistencia + comentarios + alias de DNI
+        lastRawF1 = rawF1; lastRawF2 = rawF2;   // cache para reconstruir sin re-descargar
         const f2 = processF2(rawF2);
         const f1 = processF1(rawF1);
 
-        visitaData     = buildVisita(f1.visitas, f2.lookup);
-        noParticipaData = buildNoParticipa(f1.noParticipa, f2.lookup);
+        f2Lookup       = f2.lookup;
+        visitaData     = buildVisita(f1.visitas, f2Lookup);
+        noParticipaData = buildNoParticipa(f1.noParticipa, f2Lookup);
         payasitosData  = f2.rows;
-        cumpleData     = buildCumple(f2.lookup);
+        cumpleData     = buildCumple(f2Lookup);
         gestionData    = buildGestion(visitaData);
         document.getElementById('configBanner').style.display = supabaseOK() ? 'none' : 'block';
 

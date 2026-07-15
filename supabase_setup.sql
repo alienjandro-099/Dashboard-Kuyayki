@@ -35,11 +35,22 @@ create table if not exists public.comentarios (
 
 create index if not exists idx_comentarios_record on public.comentarios (record_key);
 
+-- 2b) ALIAS de DNI (correcciones): "from_dni" debe tratarse como "to_dni".
+--     Sirve para (a) vincular un DNI mal escrito en el formulario de mes a un
+--     payasito registrado, y (b) corregir/editar el DNI de un payasito.
+create table if not exists public.dni_alias (
+    from_dni    text primary key,
+    to_dni      text not null,
+    motivo      text,
+    updated_at  timestamptz not null default now()
+);
+
 -- 3) Row Level Security.
 --    Herramienta interna: se permite a la clave anónima leer/escribir.
 --    (Si más adelante quieres restringir, aquí se cambian las policies.)
 alter table public.asistencia  enable row level security;
 alter table public.comentarios enable row level security;
+alter table public.dni_alias   enable row level security;
 
 -- ASISTENCIA: lectura, inserción y actualización para anon
 drop policy if exists "asistencia_select" on public.asistencia;
@@ -56,6 +67,16 @@ drop policy if exists "comentarios_delete" on public.comentarios;
 create policy "comentarios_select" on public.comentarios for select to anon using (true);
 create policy "comentarios_insert" on public.comentarios for insert to anon with check (true);
 create policy "comentarios_delete" on public.comentarios for delete to anon using (true);
+
+-- DNI_ALIAS: lectura, inserción, actualización y borrado para anon
+drop policy if exists "dni_alias_select" on public.dni_alias;
+drop policy if exists "dni_alias_insert" on public.dni_alias;
+drop policy if exists "dni_alias_update" on public.dni_alias;
+drop policy if exists "dni_alias_delete" on public.dni_alias;
+create policy "dni_alias_select" on public.dni_alias for select to anon using (true);
+create policy "dni_alias_insert" on public.dni_alias for insert to anon with check (true);
+create policy "dni_alias_update" on public.dni_alias for update to anon using (true) with check (true);
+create policy "dni_alias_delete" on public.dni_alias for delete to anon using (true);
 
 -- Listo. Copia luego en la web (config.js):
 --   Project URL  → Supabase → Project Settings → Data API → Project URL
