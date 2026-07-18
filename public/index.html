@@ -323,6 +323,23 @@
         }
         .btn-copy:hover { background: #E1F5FE; transform: scale(1.1); }
         .btn-copy.copied { border-color: var(--verde); background: #E8F5E9; }
+        .btn-foto {
+            border: 2px solid var(--morado); background: #fff; border-radius: 9px;
+            padding: 3px 8px; font-size: .9rem; cursor: pointer; line-height: 1; transition: all .15s;
+        }
+        .btn-foto:hover { background: #F3E5F5; transform: scale(1.1); }
+        .link-antec {
+            display: inline-block; text-decoration: none; font-weight: 800; font-size: .74rem;
+            color: var(--azul); border: 2px solid var(--azul); border-radius: 8px; padding: 2px 8px; transition: all .15s;
+        }
+        .link-antec:hover { background: var(--azul); color: #fff; }
+        .foto-preview { max-width: 100%; max-height: 64vh; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+        .hero-foto {
+            width: 92px; height: 92px; border-radius: 50%; object-fit: cover; margin: 12px auto 0;
+            display: block; border: 4px solid var(--amarillo); cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            transition: transform .15s;
+        }
+        .hero-foto:hover { transform: scale(1.05); }
         .vinc-search {
             width: 100%; border: 2px solid #ddd; border-radius: 10px; padding: 8px 10px;
             font-size: .85rem; outline: none; margin-bottom: 10px;
@@ -563,6 +580,22 @@
     </div>
 </div>
 
+<!-- MODAL FOTO -->
+<div class="modal-overlay" id="fotoModal" onclick="if(event.target===this)cerrarFoto()">
+    <div class="modal" style="max-width:540px">
+        <div class="modal-head" style="position:relative">
+            <button class="modal-close" onclick="cerrarFoto()">×</button>
+            <h3>📷 Foto del payasito</h3>
+        </div>
+        <div class="modal-body" style="text-align:center">
+            <img id="fotoImg" class="foto-preview" alt="Foto del payasito" onerror="fotoImgError()">
+            <div id="fotoFallback" style="display:none;color:#999;padding:20px">No se pudo cargar la vista previa. Ábrela en Drive ↓</div>
+            <a id="fotoLink" href="#" target="_blank" rel="noopener" class="btn-add-coment"
+               style="display:inline-block;text-decoration:none;margin-top:14px;width:auto;padding:9px 22px">Abrir en Drive ↗</a>
+        </div>
+    </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════ CONFIG
 const URL_F1 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTcKt0v5H11947fOc1zdhujgFzIPTIbiUriiE2Bp-4rN517iFcvT87u0PB6592WFZZnx9yQxt9DJOQe/pub?gid=1820549015&single=true&output=csv';
@@ -597,6 +630,7 @@ const CUMPLE_COLS = [
     { key:'dni',           label:'DNI' },
     { key:'nombreCompleto',label:'Nombre Completo' },
     { key:'payaso',        label:'Payasito' },
+    { key:'foto',          label:'Foto' },
     { key:'cel',           label:'Celular' },
     { key:'correo',        label:'Correo electrónico' },
     { key:'fechaNac',      label:'Fecha de nacimiento' },
@@ -608,6 +642,7 @@ const PAY_COLS = [
     { key:'nombreCompleto',label:'Nombre Completo' },
     { key:'dni',           label:'DNI' },
     { key:'payaso',        label:'Payasito' },
+    { key:'foto',          label:'Foto' },
     { key:'telefono',      label:'Telefono' },
     { key:'correo',        label:'Correo electrónico' },
     { key:'fechaNac',      label:'Fecha de nacimiento' },
@@ -616,6 +651,7 @@ const PAY_COLS = [
     { key:'traje',         label:'¿Tienes traje/clown outfit propio?' },
     { key:'emergNum',      label:'Contacto de emergencia (Número)' },
     { key:'emergNom',      label:'Contacto de emergencia (Nombre Completo)' },
+    { key:'antecedentes',  label:'Antecedentes' },
     { key:'fechaRegistro', label:'Fecha de Registro' },
 ];
 const NOPART_COLS = [
@@ -743,6 +779,15 @@ function cleanPhone(raw) {
     return raw.trim();
 }
 function only9(raw) { const d = (raw||'').replace(/[^0-9]/g, ''); return d.slice(-9); }
+// ── Google Drive: extraer id y construir URLs de vista/imagen
+function driveId(url) {
+    if (!url) return '';
+    let m = url.match(/[?&]id=([^&]+)/); if (m) return m[1];
+    m = url.match(/\/d\/([^/]+)/); if (m) return m[1];
+    return '';
+}
+function fotoThumb(url) { const id = driveId(url); return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1200` : url; }
+function fileView(url)  { const id = driveId(url); return id ? `https://drive.google.com/file/d/${id}/view` : url; }
 // Corrige error humano: cualquier "O" (letra) en el DNI → "0" (cero).
 // El DNI es numérico, así que toda O es un cero mal escrito. Ej: O74O2152 → 07402152
 function normDNI(s) { return (s||'').trim().replace(/[Oo]/g, '0'); }
@@ -877,6 +922,8 @@ function processF2(raw) {
         traje:   headers.indexOf(findCol(headers, ['traje/clown', 'outfit propio'])),
         emgNum:  headers.indexOf(findCol(headers, ['contacto de emergencia (numero', 'emergencia (numero'])),
         emgNom:  headers.indexOf(findCol(headers, ['contacto de emergencia (nombre', 'emergencia (nombre'])),
+        foto:    headers.indexOf(findCol(headers, ['Sube una foto', 'foto tuya o de tu personaje', 'una foto'])),
+        antec:   headers.indexOf(findCol(headers, ['Antecedentes policiales', 'Antecedentes'])),
     };
     if (I.dni < 0) return { rows: [], lookup: {} };
     const get = (row,i) => (i>=0 && i<row.length) ? (row[i]||'').trim() : '';
@@ -914,6 +961,8 @@ function processF2(raw) {
             traje:    get(row,I.traje),
             emergNum: get(row,I.emgNum),
             emergNom: get(row,I.emgNom),
+            foto:     get(row,I.foto),
+            antecedentes: get(row,I.antec),
             fechaRegistro: fmtFechaHora(ts),
             tipo,
         });
@@ -981,7 +1030,7 @@ function buildCumple(lookup) {
         const { months, days } = monthsDaysBetween(t0, nb);
         const edad = calcAge(p._dob, today);
         return {
-            dni: p.dni, nombreCompleto: p.nombreCompleto, payaso: p.payaso, cel: p.cel, correo: p.correo,
+            dni: p.dni, nombreCompleto: p.nombreCompleto, payaso: p.payaso, foto: p.foto, cel: p.cel, correo: p.correo,
             fechaNac: p.fechaNac, edad, edadACumplir: edad + 1,
             diasTxt: faltaTxt(months, days),
             _days: Math.round((nb - t0) / 86400000),
@@ -1425,6 +1474,22 @@ function copiarTexto(btn) {
         copiarFallback(text, feedback);
     }
 }
+// ── Foto (modal)
+function abrirFoto(url) {
+    if (!url) return;
+    const img = document.getElementById('fotoImg');
+    document.getElementById('fotoFallback').style.display = 'none';
+    img.style.display = 'block';
+    img.src = fotoThumb(url);
+    document.getElementById('fotoLink').href = fileView(url);
+    document.getElementById('fotoModal').classList.add('open');
+}
+function fotoImgError() {
+    document.getElementById('fotoImg').style.display = 'none';
+    document.getElementById('fotoFallback').style.display = 'block';
+}
+function cerrarFoto() { document.getElementById('fotoModal').classList.remove('open'); }
+
 function copiarFallback(text, ok) {
     const ta = document.createElement('textarea');
     ta.value = text; ta.setAttribute('readonly', '');
@@ -1449,6 +1514,7 @@ function renderPayasitos(P) {
             <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
             <td class="dni-cell">${escHtml(row.dni)}<button class="dni-edit" title="Editar DNI" onclick="abrirEditarDni('${escHtml(row.dni)}')">✏️</button></td>
             <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+            <td class="copy-cell">${row.foto?`<button class="btn-foto" title="Ver foto" data-foto="${escHtml(row.foto)}" onclick="abrirFoto(this.dataset.foto)">📷</button>`:'—'}</td>
             <td><small>${escHtml(row.telefono)||'—'}</small></td>
             <td><small>${escHtml(row.correo)||'—'}</small></td>
             <td>${escHtml(row.fechaNac)||'—'}</td>
@@ -1457,6 +1523,7 @@ function renderPayasitos(P) {
             <td>${escHtml(row.traje)||'—'}</td>
             <td><small>${escHtml(row.emergNum)||'—'}</small></td>
             <td>${escHtml(row.emergNom)||'—'}</td>
+            <td class="copy-cell">${row.antecedentes?`<a class="link-antec" href="${escHtml(fileView(row.antecedentes))}" target="_blank" rel="noopener">📄 Ver</a>`:'—'}</td>
             <td class="small-cell">${escHtml(row.fechaRegistro)||'—'}</td>
         </tr>`;
     }).join('');
@@ -1470,6 +1537,7 @@ function renderCumple() {
         <td class="dni-cell">${escHtml(row.dni)}</td>
         <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
         <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+        <td class="copy-cell">${row.foto?`<button class="btn-foto" title="Ver foto" data-foto="${escHtml(row.foto)}" onclick="abrirFoto(this.dataset.foto)">📷</button>`:'—'}</td>
         <td><small>${escHtml(row.cel)||'—'}</small></td>
         <td><small>${escHtml(row.correo)||'—'}</small></td>
         <td>${escHtml(row.fechaNac)||'—'}</td>
@@ -1489,8 +1557,9 @@ function renderCumpleHero() {
             <span class="hero-conf" style="top:10px;left:14px">🎈</span>
             <span class="hero-conf" style="top:10px;right:14px">🎊</span>
             <div class="hero-band">${hoy ? '🎂 ¡HOY CUMPLE AÑOS!' : '🎉 Siguiente cumpleañer@'}</div>
+            ${c.foto ? `<img class="hero-foto" src="${escHtml(fotoThumb(c.foto))}" alt="Foto" title="Ver foto" onclick="abrirFoto('${escHtml(c.foto)}')" onerror="this.style.display='none'">` : ''}
             <div class="hero-name">${escHtml(c.nombreCompleto)}</div>
-            <div class="hero-cake">${hoy ? '🥳🎂🥳' : '🎂'}</div>
+            <div class="hero-cake">${hoy ? '🥳🎂🥳' : (c.foto ? '' : '🎂')}</div>
             <div class="hero-row">
                 <div class="hero-col"><div class="hero-k">Falta</div><div class="hero-v falta">${hoy ? '¡Es hoy!' : escHtml(c.diasTxt)}</div></div>
                 <div class="hero-col"><div class="hero-k">Edad a cumplir</div><div class="hero-v hero-edad">${escHtml(c.edadACumplir)}</div></div>
