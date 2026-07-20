@@ -379,6 +379,7 @@
     <button class="tab"        data-sec="payasitos" onclick="showSection('payasitos')">🤡 Información de los Payasitos</button>
     <button class="tab"        data-sec="stats"     onclick="showSection('stats')">📈 Estadísticas</button>
     <button class="tab"        data-sec="gestion"   onclick="showSection('gestion')">🗒️ Asistencia y Comentarios</button>
+    <button class="tab"        data-sec="seguimiento" onclick="showSection('seguimiento')">🔎 Seguimiento</button>
 </nav>
 
 <div class="main">
@@ -521,6 +522,28 @@
             </div>
             <div class="table-scroll">
                 <table><thead><tr id="head-gestion"></tr></thead><tbody id="body-gestion"></tbody></table>
+            </div>
+        </div>
+    </section>
+
+    <!-- ══════════ SECCIÓN SEGUIMIENTO ══════════ -->
+    <section id="sec-seguimiento" hidden>
+        <div class="kpi-row" id="seg-kpi"></div>
+        <div class="filters-panel" id="panel-seguimiento" style="display:none">
+            <div class="filters-title">🎨 Segmentación – Seguimiento</div>
+            <div class="filters-grid" id="grid-seguimiento"></div>
+            <div class="filters-bar">
+                <button class="btn-clear-all" onclick="fpClearAll('seguimiento')">✕ Limpiar todos</button>
+                <span class="results-info">Mostrando <strong id="seguimiento-shown">0</strong> de <strong id="seguimiento-total">0</strong> payasitos sin visitas</span>
+            </div>
+        </div>
+        <div class="table-card" id="card-seguimiento" style="display:none; border-color:var(--naranja)">
+            <div class="table-topbar" style="background:linear-gradient(120deg,var(--naranja),var(--rojo))">
+                <span class="table-topbar-title">🔎 Payasitos registrados que NO han ido a ninguna visita</span>
+                <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
+            </div>
+            <div class="table-scroll">
+                <table><thead><tr id="head-seguimiento"></tr></thead><tbody id="body-seguimiento"></tbody></table>
             </div>
         </div>
     </section>
@@ -677,12 +700,24 @@ const GESTION_COLS = [
     { key:'asistioTxt',    label:'¿Asistió?' },
     { key:'comentarios',   label:'Comentarios' },
 ];
+const SEG_COLS = [
+    { key:'_copy',         label:'📋' },
+    { key:'nombreCompleto',label:'Nombre Completo' },
+    { key:'dni',           label:'DNI' },
+    { key:'payaso',        label:'Payasito' },
+    { key:'foto',          label:'Foto' },
+    { key:'telefono',      label:'Telefono' },
+    { key:'correo',        label:'Correo electrónico' },
+    { key:'genero',        label:'Género' },
+    { key:'fechaRegistro', label:'Registrado el' },
+];
 
 // ═══════════════════════════════════════════ STATE
-let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [], gestionData = [];
+let visitaData = [], noParticipaData = [], payasitosData = [], cumpleData = [], gestionData = [], seguimientoData = [];
 let nextRefresh = null;
 let lastRawF1 = null, lastRawF2 = null;   // CSV crudos cacheados (para reconstruir sin re-descargar)
 let f2Lookup = {};                        // dni(canon) -> payasito ACTUAL
+let visitedDnisSet = new Set();           // DNIs (canon) con al menos una visita asistida
 
 // ── Supabase / overrides
 let sb = null;                       // cliente Supabase (o null si no configurado)
@@ -1022,6 +1057,13 @@ function buildGestion(visitas) {
     });
     return out;
 }
+// Seguimiento: payasitos registrados (F2) que NO tienen ninguna visita asistida (F1).
+function buildSeguimiento(visitas, lookup) {
+    visitedDnisSet = new Set(visitas.filter(estaAsistido).map(r => r.dni));
+    return Object.values(lookup)
+        .filter(p => !visitedDnisSet.has(p.dni))
+        .sort((a, b) => String(a.nombreCompleto).localeCompare(String(b.nombreCompleto), 'es'));
+}
 function buildCumple(lookup) {
     const today = new Date();
     return Object.values(lookup).filter(p => p._dob).map(p => {
@@ -1265,6 +1307,40 @@ function renderGestion(P) {
         </tr>`;
     }).join('');
 }
+function renderSeguimiento(P) {
+    const totalReg = Object.keys(f2Lookup).length;
+    const noFueron = P.allRows.length;
+    const fueron = Math.max(0, totalReg - noFueron);
+    const pct = totalReg ? (fueron / totalReg * 100) : 0;
+    document.getElementById('seg-kpi').innerHTML = [
+        { icon:'🤡', val: totalReg,  lbl:'Payasitos registrados' },
+        { icon:'✅', val: fueron,    lbl:'Han ido a ≥1 visita' },
+        { icon:'🚫', val: noFueron,  lbl:'No han ido a ninguna' },
+        { icon:'📊', val: pct.toFixed(0) + '%', lbl:'Participación' },
+    ].map(k => `<div class="kpi-card"><div class="kpi-icon">${k.icon}</div>
+        <div class="kpi-val">${escHtml(k.val)}</div><div class="kpi-lbl">${escHtml(k.lbl)}</div></div>`).join('');
+
+    const data = fpFiltered(P);
+    document.getElementById('seguimiento-shown').textContent = data.length;
+    document.getElementById('seguimiento-total').textContent = P.allRows.length;
+    document.getElementById('card-seguimiento').style.display = 'block';
+    const tbody = document.getElementById('body-seguimiento');
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="${SEG_COLS.length}" class="no-results"><div class="nr-emoji">🎉</div><p>Todos los payasitos filtrados ya participaron</p></td></tr>`;
+        return;
+    }
+    tbody.innerHTML = data.map(row => `<tr>
+        <td class="copy-cell"><button class="btn-copy" title="Copiar datos" data-copy="${escHtml(textoCopiaPayasito(row))}" onclick="copiarTexto(this)">📋</button></td>
+        <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
+        <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
+        <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+        <td class="copy-cell">${row.foto?`<button class="btn-foto" title="Ver foto" data-foto="${escHtml(row.foto)}" onclick="abrirFoto(this.dataset.foto)">📷</button>`:'—'}</td>
+        <td><small>${escHtml(row.telefono)||'—'}</small></td>
+        <td><small>${escHtml(row.correo)||'—'}</small></td>
+        <td>${escHtml(row.genero)||'—'}</td>
+        <td class="small-cell">${escHtml(row.fechaRegistro)||'—'}</td>
+    </tr>`).join('');
+}
 
 // ── Asistencia (toggle → Supabase)
 async function toggleAsistencia(key, checked) {
@@ -1385,12 +1461,14 @@ function rebuildData() {
     payasitosData  = f2.rows;
     cumpleData     = buildCumple(f2Lookup);
     gestionData    = buildGestion(visitaData);
+    seguimientoData = buildSeguimiento(visitaData, f2Lookup);
     const upd = (id, rows, render) => { if (PANELS[id]) { PANELS[id].allRows = rows; fpRender(id); render(PANELS[id]); } };
     upd('visita', visitaData, renderVisita);
     upd('noparticipa', noParticipaData, renderNoParticipa);
     upd('payasitos', payasitosData, renderPayasitos);
     upd('estadisticas', visitaData, renderEstadisticas);
     upd('gestion', gestionData, renderGestion);
+    upd('seguimiento', seguimientoData, renderSeguimiento);
     renderCumple();
     const np = document.getElementById('np-count');
     if (np) np.textContent = noParticipaData.filter(r => r.tipoRegistro2 === 'ACTUAL').length;
@@ -1710,7 +1788,7 @@ function exportVisitaExcel() {
 
 // ═══════════════════════════════════════════ TABS
 function showSection(name) {
-    ['visita','cumple','payasitos','stats','gestion'].forEach(s => {
+    ['visita','cumple','payasitos','stats','gestion','seguimiento'].forEach(s => {
         document.getElementById('sec-'+s).hidden = (s !== name);
     });
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.sec === name));
@@ -1745,6 +1823,7 @@ async function loadData() {
         payasitosData  = f2.rows;
         cumpleData     = buildCumple(f2Lookup);
         gestionData    = buildGestion(visitaData);
+        seguimientoData = buildSeguimiento(visitaData, f2Lookup);
         document.getElementById('configBanner').style.display = supabaseOK() ? 'none' : 'block';
 
         // Default MES (visita) = último mes cronológico con registros ACTUAL
@@ -1822,6 +1901,17 @@ async function loadData() {
                 { key:'asistioTxt',    label:'¿ASISTIÓ?' },
             ],
             allRows: gestionData, defaults: gestionDefaults, monthKey:'mes', onChange: renderGestion,
+        });
+        setHeaders('head-seguimiento', SEG_COLS);
+        makeFilterPanel({
+            id:'seguimiento', gridId:'grid-seguimiento', panelId:'panel-seguimiento', cardId:'card-seguimiento',
+            defs:[
+                { key:'dni',           label:'DNI' },
+                { key:'nombreCompleto',label:'NOMBRE' },
+                { key:'payaso',        label:'PAYASITO' },
+                { key:'genero',        label:'GÉNERO' },
+            ],
+            allRows: seguimientoData, defaults: {}, onChange: renderSeguimiento,
         });
         renderCumple();
 
