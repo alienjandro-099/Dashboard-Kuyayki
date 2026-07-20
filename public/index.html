@@ -172,6 +172,9 @@
         .b-mes { background: linear-gradient(120deg, var(--morado), var(--azul)); color: #fff; padding: 2px 12px; }
         .b-edad { background: var(--naranja); color: #fff; }
         .b-dias { background: var(--verde); color: #fff; }
+        .inact-media { background: #FEF3C7; color: #92400E; }
+        .inact-alta  { background: #FFE4E6; color: #9F1239; }
+        .inact-nunca { background: var(--rojo); color: #fff; }
         .fecha-reg { font-weight: 700; color: var(--morado); }
         .dni-cell { font-family: monospace; font-size: .82rem; white-space: nowrap; }
         .dni-go {
@@ -534,12 +537,12 @@
             <div class="filters-grid" id="grid-seguimiento"></div>
             <div class="filters-bar">
                 <button class="btn-clear-all" onclick="fpClearAll('seguimiento')">✕ Limpiar todos</button>
-                <span class="results-info">Mostrando <strong id="seguimiento-shown">0</strong> de <strong id="seguimiento-total">0</strong> payasitos sin visitas</span>
+                <span class="results-info">Mostrando <strong id="seguimiento-shown">0</strong> de <strong id="seguimiento-total">0</strong> payasitos inactivos</span>
             </div>
         </div>
         <div class="table-card" id="card-seguimiento" style="display:none; border-color:var(--naranja)">
             <div class="table-topbar" style="background:linear-gradient(120deg,var(--naranja),var(--rojo))">
-                <span class="table-topbar-title">🔎 Payasitos registrados que NO han ido a ninguna visita</span>
+                <span class="table-topbar-title">🔎 Payasitos inactivos (sin visita hace 5+ meses o nunca)</span>
                 <button class="btn-refresh-now" onclick="loadData()">🔄 Actualizar ahora</button>
             </div>
             <div class="table-scroll">
@@ -705,6 +708,7 @@ const SEG_COLS = [
     { key:'nombreCompleto',label:'Nombre Completo' },
     { key:'dni',           label:'DNI' },
     { key:'payaso',        label:'Payasito' },
+    { key:'inactividad',   label:'Inactividad' },
     { key:'foto',          label:'Foto' },
     { key:'telefono',      label:'Telefono' },
     { key:'correo',        label:'Correo electrónico' },
@@ -848,6 +852,12 @@ function monthsDaysBetween(from, to) {
 }
 function faltaTxt(months, days) {
     return `${months} ${months===1?'mes':'meses'} y ${days} ${days===1?'día':'días'}`;
+}
+// Meses completos transcurridos entre dos fechas (from → to).
+function mesesEntre(from, to) {
+    let m = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+    if (to.getDate() < from.getDate()) m--;
+    return Math.max(0, m);
 }
 
 // ═══════════════════════════════════════════ FETCH
@@ -1057,12 +1067,31 @@ function buildGestion(visitas) {
     });
     return out;
 }
-// Seguimiento: payasitos registrados (F2) que NO tienen ninguna visita asistida (F1).
+// Seguimiento: payasitos registrados (F2) INACTIVOS = sin visita asistida en
+// los últimos 5 meses, o que nunca han ido. Incluye meses de inactividad.
+const INACT_MESES = 5;
 function buildSeguimiento(visitas, lookup) {
-    visitedDnisSet = new Set(visitas.filter(estaAsistido).map(r => r.dni));
-    return Object.values(lookup)
-        .filter(p => !visitedDnisSet.has(p.dni))
-        .sort((a, b) => String(a.nombreCompleto).localeCompare(String(b.nombreCompleto), 'es'));
+    const today = new Date();
+    // Última fecha de registro de visita asistida por DNI
+    const lastTs = {};
+    visitas.forEach(r => {
+        if (!estaAsistido(r)) return;
+        const ts = parseTS(r._ts); if (!ts) return;
+        if (!lastTs[r.dni] || ts > lastTs[r.dni]) lastTs[r.dni] = ts;
+    });
+    visitedDnisSet = new Set(Object.keys(lastTs));
+    const out = [];
+    Object.values(lookup).forEach(p => {
+        const last = lastTs[p.dni];
+        if (!last) {   // nunca ha ido
+            out.push(Object.assign({}, p, { inactividad: 'NUNCA', _inact: Infinity, _meses: null }));
+            return;
+        }
+        const m = mesesEntre(last, today);
+        if (m < INACT_MESES) return;   // activo → no se lista
+        out.push(Object.assign({}, p, { inactividad: `${m} ${m === 1 ? 'MES' : 'MESES'}`, _inact: m, _meses: m }));
+    });
+    return out.sort((a, b) => b._inact - a._inact);
 }
 function buildCumple(lookup) {
     const today = new Date();
@@ -1309,14 +1338,15 @@ function renderGestion(P) {
 }
 function renderSeguimiento(P) {
     const totalReg = Object.keys(f2Lookup).length;
-    const noFueron = P.allRows.length;
-    const fueron = Math.max(0, totalReg - noFueron);
-    const pct = totalReg ? (fueron / totalReg * 100) : 0;
+    const inactivosTotal = P.allRows.length;
+    const nunca = P.allRows.filter(r => r._inact === Infinity).length;
+    const inactivos5m = inactivosTotal - nunca;
+    const activos = Math.max(0, totalReg - inactivosTotal);
     document.getElementById('seg-kpi').innerHTML = [
-        { icon:'🤡', val: totalReg,  lbl:'Payasitos registrados' },
-        { icon:'✅', val: fueron,    lbl:'Han ido a ≥1 visita' },
-        { icon:'🚫', val: noFueron,  lbl:'No han ido a ninguna' },
-        { icon:'📊', val: pct.toFixed(0) + '%', lbl:'Participación' },
+        { icon:'🤡', val: totalReg,     lbl:'Payasitos registrados' },
+        { icon:'✅', val: activos,      lbl:`Activos (visita < ${INACT_MESES} meses)` },
+        { icon:'⏳', val: inactivos5m,  lbl:`Inactivos (${INACT_MESES}+ meses)` },
+        { icon:'🚫', val: nunca,        lbl:'Nunca han ido' },
     ].map(k => `<div class="kpi-card"><div class="kpi-icon">${k.icon}</div>
         <div class="kpi-val">${escHtml(k.val)}</div><div class="kpi-lbl">${escHtml(k.lbl)}</div></div>`).join('');
 
@@ -1326,20 +1356,24 @@ function renderSeguimiento(P) {
     document.getElementById('card-seguimiento').style.display = 'block';
     const tbody = document.getElementById('body-seguimiento');
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="${SEG_COLS.length}" class="no-results"><div class="nr-emoji">🎉</div><p>Todos los payasitos filtrados ya participaron</p></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${SEG_COLS.length}" class="no-results"><div class="nr-emoji">🎉</div><p>Ningún payasito inactivo con los filtros actuales</p></td></tr>`;
         return;
     }
-    tbody.innerHTML = data.map(row => `<tr>
+    tbody.innerHTML = data.map(row => {
+        const inactCls = row._inact === Infinity ? 'inact-nunca' : (row._inact >= 8 ? 'inact-alta' : 'inact-media');
+        return `<tr>
         <td class="copy-cell"><button class="btn-copy" title="Copiar datos" data-copy="${escHtml(textoCopiaPayasito(row))}" onclick="copiarTexto(this)">📋</button></td>
         <td class="nombre-cell">${escHtml(row.nombreCompleto)}</td>
         <td class="dni-cell">${escHtml(row.dni)}<button class="dni-go" title="Ver info de este payasito" onclick="goToPayasito('${escHtml(row.dni)}')">➜</button></td>
         <td class="payaso-cell">${row.payaso?escHtml(row.payaso):'<em style="color:#ccc">—</em>'}</td>
+        <td><span class="badge ${inactCls}">${escHtml(row.inactividad)}</span></td>
         <td class="copy-cell">${row.foto?`<button class="btn-foto" title="Ver foto" data-foto="${escHtml(row.foto)}" onclick="abrirFoto(this.dataset.foto)">📷</button>`:'—'}</td>
         <td><small>${escHtml(row.telefono)||'—'}</small></td>
         <td><small>${escHtml(row.correo)||'—'}</small></td>
         <td>${escHtml(row.genero)||'—'}</td>
         <td class="small-cell">${escHtml(row.fechaRegistro)||'—'}</td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
 }
 
 // ── Asistencia (toggle → Supabase)
